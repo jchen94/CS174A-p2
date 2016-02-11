@@ -9,10 +9,13 @@
 var canvas, canvas_size, gl = null, g_addrs,
 	movement = vec2(),	thrust = vec3(), 	looking = false, prev_time = 0, animate = false, animation_time = 0;
 		var gouraud = false, color_normals = false, solid = false;
+var top_view = false;
 
-var direction = 0; // {0, 1, 2, 3} = {up, right, down, left}
+var block_pivot = false;
+var turn_right;
+var stop_angle;
 
-
+var direction = 180; // {0, 1, 2, 3} = {up, right, down, left}
 
 var pos_x = 0;
 var pos_y = 5;
@@ -75,47 +78,34 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
 	shortcut.add( "up", function() { 
-		if (direction === 0) {
-			pos_z += 5;
-		}
-		else if (direction === 1) {
-			pos_x -= 5;
-		}
-		else if (direction === 2) {
-			pos_z -= 5;
-		}
-		else if (direction === 3){
-			pos_x +=5
-		}
+			pos_x += 3 * Math.cos(to_radians(direction));
+			pos_z += 3 * Math.sin(to_radians(direction));
+
 		});
 	shortcut.add( "right", function() { 
-		if (direction === 3) {
-			direction = 0;
+		if (animate){
+			block_pivot = true;
+			turn_right = true;
+			stop_angle = direction + 90;
 		}
 		else
-			direction += 1;
+			direction += 3;
 	});
 	shortcut.add( "down", function() { 
-		if (direction === 0) {
-			pos_z -= 5;
-		}
-		else if (direction === 1) {
-			pos_x += 5;
-		}
-		else if (direction === 2) {
-			pos_z += 5;
-		}
-		else if (direction === 3){
-			pos_x -= 5
-		}
+		pos_x -= 3 * Math.cos(to_radians(direction));
+		pos_z -= 3 * Math.sin(to_radians(direction));
 		});
 	shortcut.add( "left", function() { 
-		if (direction === 0) {
-			direction = 3;
+		if (animate){
+			block_pivot = true;
+			turn_right = false;
+			stop_angle = direction - 90;
 		}
 		else
-			direction -= 1;
+			direction -= 3;
 	});
+
+	shortcut.add( "ALT+Space", function() { top_view = !top_view; } );
 	
 	shortcut.add( "p",     ( function(self) { return function() { self.m_axis.basis_selection++; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );
 	shortcut.add( "m",     ( function(self) { return function() { self.m_axis.basis_selection--; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );	
@@ -145,6 +135,22 @@ function update_camera( self, animation_delta_time )
 // *******************************************************	
 // display(): called once per frame, whenever OpenGL decides it's time to redraw.
 
+function to_radians(angle_in_degrees) {
+	return angle_in_degrees * Math.PI / 180;
+}
+
+function pivot() {
+	if (direction !== stop_angle) {
+		if (turn_right)
+			direction += 5;
+		else
+			direction -= 5;
+	}
+	else {
+		block_pivot = false;
+	}
+}
+
 Animation.prototype.display = function(time)
 	{
 		if(!time) time = 0;
@@ -152,30 +158,34 @@ Animation.prototype.display = function(time)
 		if(animate) this.graphicsState.animation_time += this.animation_delta_time;
 		prev_time = time;
 		
-		update_camera( this, this.animation_delta_time );
+		//update_camera( this, this.animation_delta_time );
 			
 		this.basis_id = 0;
 		
 		var model_transform = mat4();
 
-		var at = vec3(pos_x, pos_y, pos_z);
+		if (block_pivot)
+			pivot();
 
-		if (direction === 0) {
-			var eye = vec3(pos_x, pos_y + 10, pos_z - 20);
-			var up = vec3(0, 1, 1);
+		var cam_x_dist = 20 * Math.cos(to_radians(direction));
+		var cam_z_dist = 20 * Math.sin(to_radians(direction));
+
+		var eye_x, eye_y, eye_z;
+		eye_x = pos_x - cam_x_dist;
+		eye_y = pos_y;
+		eye_z = pos_z - cam_z_dist;
+
+		if (top_view) {
+			eye_y = pos_y + 100;
+			eye_x = pos_x;
+			eye_z = pos_z;
 		}
-		else if (direction === 1) {
-			eye = vec3(pos_x + 20, pos_y + 10, pos_z);
-			up = vec3(1, 1, 0);
-		}
-		else if (direction === 2) {
-			eye = vec3(pos_x, pos_y + 10, pos_z + 20);
-			up = vec3(0, 1, 1);
-		}
-		else if (direction === 3) {
-			eye = vec3(pos_x - 20, pos_y + 10, pos_z);
-			up = vec3(1, 1, 0);
-		}
+
+		var at = vec3(pos_x, pos_y, pos_z);
+		var eye = vec3(eye_x, eye_y, eye_z);
+		var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
+
+
 
 		this.graphicsState.camera_transform = lookAt(eye, at, up);
 		// so this should rotate?
@@ -191,7 +201,7 @@ Animation.prototype.display = function(time)
 		**********************************/
 		var board = new Board();
 		var obstacle = new Obstacle(board);
-		this.draw_board(model_transform, board, obstacle);
+		this.draw_large_board(model_transform, board, obstacle);
 		model_transform = mult(model_transform, translate(pos_x, 3, pos_z));
 		this.m_sphere.draw(this.graphicsState, model_transform, earth);
 		
@@ -229,14 +239,24 @@ Animation.prototype.draw_board_col = function (model_transform, board, toggle_co
 	return model_transform;
 }
 
+Animation.prototype.draw_large_board = function (model_transform, board, obstacle) {
+	this.draw_board(model_transform, board, obstacle);
+	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
+	this.draw_board(model_transform, board, obstacle);
+	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
+	this.draw_board(model_transform, board, obstacle);
+	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
+	this.draw_board(model_transform, board, obstacle);
+}
+
 Animation.prototype.draw_board = function (model_transform, board, obstacle) {
 	for (var i = 0; i < board.BOARD_SIZE; i++) {
 		if (i % 2 == 0)
 			this.draw_board_col(model_transform, board, 0);
 		else {
 			this.draw_board_col(model_transform, board, 1);
-			var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/2, 0));
-			this.draw_obstacles_col(up_mt, board, obstacle);
+			// var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/2, 0));
+			// this.draw_obstacles_col(up_mt, board, obstacle);
 		}
 		model_transform = mult(model_transform, translate(board.BOARD_UNIT_SIZE, 0, 0));
 	}
@@ -257,6 +277,7 @@ Animation.prototype.draw_obstacles_col = function (model_transform, board, obsta
 	}
 	return model_transform;
 }
+
 
 Animation.prototype.draw_obstacle_on_board = function (model_transform, board, obstacle) {
 
