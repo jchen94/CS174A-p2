@@ -9,17 +9,25 @@
 var canvas, canvas_size, gl = null, g_addrs,
 	movement = vec2(),	thrust = vec3(), 	looking = false, prev_time = 0, animate = false, animation_time = 0;
 		var gouraud = false, color_normals = false, solid = false;
+
 var top_view = false;
 
 var block_pivot = false;
 var turn_right;
 var stop_angle;
 
-var direction = 180; // {0, 1, 2, 3} = {up, right, down, left}
+var direction = 90; 
+var orientation = 0; // {0, 1, 2, 3} = {up, right, down, left}
 
 var pos_x = 0;
 var pos_y = 5;
 var pos_z = 0;
+
+var board = new Board(9); // set up 9x9 board
+var obstacle = new Obstacle(board);
+
+var board_x_bound, board_z_bound = board.BOARD_SIZE * board.BOARD_UNIT_SIZE;
+
 
 function CURRENT_BASIS_IS_WORTH_SHOWING(self, model_transform) { self.m_axis.draw( self.basis_id++, self.graphicsState, model_transform, new Material( vec4( .8,.3,.8,1 ), 1, 1, 1, 40, "" ) ); }
 
@@ -78,31 +86,102 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
 	shortcut.add( "up", function() { 
-			pos_x += 3 * Math.cos(to_radians(direction));
-			pos_z += 3 * Math.sin(to_radians(direction));
+		if (top_view) {
+			if (orientation == 0 && inBounds(pos_x, pos_y, pos_z+5))
+				pos_z += 5;
+			else if (orientation == 1 && inBounds(pos_x-5, pos_y, pos_z))
+				pos_x -= 5;
+			else if (orientation == 2 && inBounds(pos_x, pos_y, pos_z-5))
+				pos_z -= 5;
+			else if (orientation == 3 && inBounds(pos_x+5, pos_y, pos_z))
+				pos_x += 5;
+
+		}
+		else {
+			if (!block_pivot && inBounds(pos_x + 5 * Math.cos(to_radians(direction)), pos_y, pos_z + 5 * Math.sin(to_radians(direction)))) {
+				pos_x += 5 * Math.cos(to_radians(direction));
+				pos_z += 5 * Math.sin(to_radians(direction));
+			}
+		}
 
 		});
-	shortcut.add( "right", function() { 
-		if (animate){
-			block_pivot = true;
-			turn_right = true;
-			stop_angle = direction + 90;
+	shortcut.add( "right", function() {
+		if (top_view) {
+			if (orientation == 0 && inBounds(pos_x-5, pos_y, pos_z))
+				pos_x -= 5;
+			else if (orientation == 1 && inBounds(pos_x, pos_y, pos_z-5))
+				pos_z -= 5;
+			else if (orientation == 2 && inBounds(pos_x+5, pos_y, pos_z))
+				pos_x += 5;
+			else if (orientation == 3 && inBounds(pos_x, pos_y, pos_z+5))
+				pos_z += 5;
+
 		}
-		else
-			direction += 3;
+
+		else {
+			if (animate){
+				if (!block_pivot) {
+					block_pivot = true;
+					turn_right = true;
+					stop_angle = direction + 90;
+					if (orientation == 3)
+						orientation = 0;
+					else
+						orientation++;
+				}
+			}
+			else
+				direction += 5;
+		}
 	});
 	shortcut.add( "down", function() { 
-		pos_x -= 3 * Math.cos(to_radians(direction));
-		pos_z -= 3 * Math.sin(to_radians(direction));
+		if (top_view) {
+			if (orientation == 0 && inBounds(pos_x, pos_y, pos_z-5))
+				pos_z -= 5;
+			else if (orientation == 1 && inBounds(pos_x+5, pos_y, pos_z))
+				pos_x += 5;
+			else if (orientation == 2 && inBounds(pos_x, pos_y, pos_z+5))
+				pos_z += 5;
+			else if (orientation == 3 && inBounds(pos_x-5, pos_y, pos_z))
+				pos_x -= 5;
+
+		}
+		else {
+			if (!block_pivot && inBounds(pos_x - 5 * Math.cos(to_radians(direction)), pos_y, pos_z - 5 * Math.sin(to_radians(direction)))) {
+			pos_x -= 5 * Math.cos(to_radians(direction));
+			pos_z -= 5 * Math.sin(to_radians(direction));
+		}
+		}
 		});
 	shortcut.add( "left", function() { 
-		if (animate){
-			block_pivot = true;
-			turn_right = false;
-			stop_angle = direction - 90;
+		if (top_view) {
+			if (top_view) {
+				if (orientation == 0 && inBounds(pos_x+5, pos_y, pos_z))
+					pos_x += 5;
+				else if (orientation == 1 && inBounds(pos_x, pos_y, pos_z+5))
+					pos_z += 5;
+				else if (orientation == 2 && inBounds(pos_x-5, pos_y, pos_z))
+					pos_x -= 5;
+				else if (orientation == 3 && inBounds(pos_x, pos_y, pos_z-5))
+					pos_z -= 5;
+
+			}
 		}
-		else
-			direction -= 3;
+		else {
+			if (animate){
+				if (!block_pivot) {
+					block_pivot = true;
+					turn_right = false;
+					stop_angle = direction - 90;
+					if (orientation == 0)
+							orientation = 3;
+						else
+							orientation--;
+					}
+			}
+			else
+				direction -= 5;
+		}
 	});
 
 	shortcut.add( "ALT+Space", function() { top_view = !top_view; } );
@@ -139,6 +218,14 @@ function to_radians(angle_in_degrees) {
 	return angle_in_degrees * Math.PI / 180;
 }
 
+function inBounds(x, y, z) {
+	if (Math.abs(x) > 40)
+		return false;
+	if (Math.abs(z) > 40)
+		return false;
+	return true;
+}
+
 function pivot() {
 	if (direction !== stop_angle) {
 		if (turn_right)
@@ -167,23 +254,22 @@ Animation.prototype.display = function(time)
 		if (block_pivot)
 			pivot();
 
-		var cam_x_dist = 20 * Math.cos(to_radians(direction));
-		var cam_z_dist = 20 * Math.sin(to_radians(direction));
+		var cam_x_dist = 2.5 * Math.cos(to_radians(direction));
+		var cam_z_dist = 2.5 * Math.sin(to_radians(direction));
 
 		var eye_x, eye_y, eye_z;
 		eye_x = pos_x - cam_x_dist;
-		eye_y = pos_y;
+		eye_y = pos_y + 0.5;
 		eye_z = pos_z - cam_z_dist;
-
-		if (top_view) {
-			eye_y = pos_y + 100;
-			eye_x = pos_x;
-			eye_z = pos_z;
-		}
 
 		var at = vec3(pos_x, pos_y, pos_z);
 		var eye = vec3(eye_x, eye_y, eye_z);
 		var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
+
+		if (top_view) {
+			at = vec3(0, 0, 0);
+			eye = vec3(0, 120, 0);
+		}
 
 
 
@@ -199,13 +285,9 @@ Animation.prototype.display = function(time)
 		/**********************************
 		Start coding here!!!!
 		**********************************/
-		var board = new Board();
-		var obstacle = new Obstacle(board);
 		this.draw_large_board(model_transform, board, obstacle);
 		model_transform = mult(model_transform, translate(pos_x, 3, pos_z));
 		this.m_sphere.draw(this.graphicsState, model_transform, earth);
-		
-
 
 	}	
 
@@ -217,6 +299,7 @@ Animation.prototype.update_strings = function( debug_screen_object )		// Strings
 	debug_screen_object.string_map["basis"] = "Showing basis: " + this.m_axis.basis_selection;
 	debug_screen_object.string_map["animate"] = "Animation " + (animate ? "on" : "off") ;
 	debug_screen_object.string_map["thrust"] = "Thrust: " + thrust;
+	debug_screen_object.string_map["direction]"] = "Direction: " + direction;
 }
 
 // draws a single board square
@@ -255,8 +338,8 @@ Animation.prototype.draw_board = function (model_transform, board, obstacle) {
 			this.draw_board_col(model_transform, board, 0);
 		else {
 			this.draw_board_col(model_transform, board, 1);
-			// var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/2, 0));
-			// this.draw_obstacles_col(up_mt, board, obstacle);
+			var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/2, 0));
+			this.draw_obstacles_col(up_mt, board, obstacle);
 		}
 		model_transform = mult(model_transform, translate(board.BOARD_UNIT_SIZE, 0, 0));
 	}
@@ -264,7 +347,7 @@ Animation.prototype.draw_board = function (model_transform, board, obstacle) {
 }
 
 Animation.prototype.draw_obstacle = function (model_transform, obstacle) {
-	model_transform = mult(model_transform, scale(obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE));
+	model_transform = mult(model_transform, scale(obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE*2, obstacle.OBSTACLE_SIZE));
 	this.m_cube.draw(this.graphicsState, model_transform, obstacle.OBSTACLE_COLOR);
 
 }
@@ -283,9 +366,9 @@ Animation.prototype.draw_obstacle_on_board = function (model_transform, board, o
 
 }
 
-function Board() {
+function Board(board_size) {
 	// dimensions of board: default is 9x9
-	this.BOARD_SIZE = 9;
+	this.BOARD_SIZE = board_size;
 
 	// size of each square on the board: default is 2x2
 	this.BOARD_UNIT_SIZE = 5;
@@ -293,6 +376,19 @@ function Board() {
 	this.BOARD_UNIT_COLOR_1 = new Material(vec4(0, 0.392157, 0, 1), 1, 1, 1, 20); 
 	// forest green
 	this.BOARD_UNIT_COLOR_2 = new Material(vec4(0.133333, 0.545098, 0.133333, 1), 1, 1, 1, 20); 
+
+	this.board_arr = new Array(this.BOARD_SIZE);
+	for (var i = 0 ; i < this.BOARD_SIZE; i++) {
+		this.board_arr[i] = new Array(this.BOARD_SIZE);
+	}
+	for (var i = 0; i < this.BOARD_SIZE; i++) {
+		for (var j = 0; j < this.BOARD_SIZE; j++) {
+			if (i % 2 == 1 && j % 2 == 1)
+				this.board_arr[i][j] = 1; // set as obstacle
+			else
+				this.board_arr[i][j] = 0; // set as free space
+		}
+	}
 }
 
 function Obstacle(board) {
