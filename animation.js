@@ -16,15 +16,17 @@ var block_pivot = false;
 var turn_right;
 var stop_angle;
 
+var walking = false;
+var forward = false;
+
 var direction = 90; 
 var orientation = 0; // {0, 1, 2, 3} = {up, right, down, left}
 
-var pos_x = 0;
-var pos_y = 5;
-var pos_z = 0;
-
-var board = new Board(9); // set up 9x9 board
+var board = new Board(17); // set up 17x17 board
 var obstacle = new Obstacle(board);
+var player = new Player(0, board.BOARD_UNIT_SIZE/2, 0);
+
+var bullet = new Bullet(0, board.BOARD_UNIT_SIZE/2 + 0.75, 0); // oh boy! This is just a test. Figure out something better later.
 
 var board_x_bound, board_z_bound = board.BOARD_SIZE * board.BOARD_UNIT_SIZE;
 
@@ -35,7 +37,6 @@ function CURRENT_BASIS_IS_WORTH_SHOWING(self, model_transform) { self.m_axis.dra
 // *******************************************************	
 // When the web page's window loads it creates an "Animation" object.  It registers itself as a displayable object to our other class "GL_Context" -- which OpenGL is told to call upon every time a
 // draw / keyboard / mouse event happens.
-
 window.onload = function init() {	var anim = new Animation();	}
 function Animation()
 {
@@ -85,39 +86,27 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+g", function() { gouraud = !gouraud;				gl.uniform1i( g_addrs.GOURAUD_loc, gouraud);	} );
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
-	shortcut.add( "up", function() { 
-		if (top_view) {
-			if (orientation == 0 && inBounds(pos_x, pos_y, pos_z+5))
-				pos_z += 5;
-			else if (orientation == 1 && inBounds(pos_x-5, pos_y, pos_z))
-				pos_x -= 5;
-			else if (orientation == 2 && inBounds(pos_x, pos_y, pos_z-5))
-				pos_z -= 5;
-			else if (orientation == 3 && inBounds(pos_x+5, pos_y, pos_z))
-				pos_x += 5;
-
+	shortcut.add( "t", 		function() {
+		if (!player.bullet_fired) {
+			player.bullet_fired = true;
+			bullet.pos_x = player.pos_x;
+			bullet.pos_z = player.pos_z;
+			bullet.orientation = orientation;
 		}
+	});
+	shortcut.add( "up", function() { 
+		if (top_view)
+			top_view_movement(0, player);
 		else {
-			if (!block_pivot && inBounds(pos_x + 5 * Math.cos(to_radians(direction)), pos_y, pos_z + 5 * Math.sin(to_radians(direction)))) {
-				pos_x += 5 * Math.cos(to_radians(direction));
-				pos_z += 5 * Math.sin(to_radians(direction));
+			if (!block_pivot && inBounds(player.pos_x + 5 * Math.cos(to_radians(direction)), player.pos_y, player.pos_z + 5 * Math.sin(to_radians(direction)))) {
+				player.pos_x += 5 * Math.cos(to_radians(direction));
+				player.pos_z += 5 * Math.sin(to_radians(direction));
 			}
 		}
-
 		});
 	shortcut.add( "right", function() {
-		if (top_view) {
-			if (orientation == 0 && inBounds(pos_x-5, pos_y, pos_z))
-				pos_x -= 5;
-			else if (orientation == 1 && inBounds(pos_x, pos_y, pos_z-5))
-				pos_z -= 5;
-			else if (orientation == 2 && inBounds(pos_x+5, pos_y, pos_z))
-				pos_x += 5;
-			else if (orientation == 3 && inBounds(pos_x, pos_y, pos_z+5))
-				pos_z += 5;
-
-		}
-
+		if (top_view)
+			top_view_movement(1, player);
 		else {
 			if (animate){
 				if (!block_pivot) {
@@ -135,38 +124,18 @@ Animation.prototype.init_keys = function()
 		}
 	});
 	shortcut.add( "down", function() { 
-		if (top_view) {
-			if (orientation == 0 && inBounds(pos_x, pos_y, pos_z-5))
-				pos_z -= 5;
-			else if (orientation == 1 && inBounds(pos_x+5, pos_y, pos_z))
-				pos_x += 5;
-			else if (orientation == 2 && inBounds(pos_x, pos_y, pos_z+5))
-				pos_z += 5;
-			else if (orientation == 3 && inBounds(pos_x-5, pos_y, pos_z))
-				pos_x -= 5;
-
-		}
+		if (top_view)
+			top_view_movement(2, player);
 		else {
-			if (!block_pivot && inBounds(pos_x - 5 * Math.cos(to_radians(direction)), pos_y, pos_z - 5 * Math.sin(to_radians(direction)))) {
-			pos_x -= 5 * Math.cos(to_radians(direction));
-			pos_z -= 5 * Math.sin(to_radians(direction));
+			if (!block_pivot && inBounds(player.pos_x - 5 * Math.cos(to_radians(direction)), player.pos_y, player.pos_z - 5 * Math.sin(to_radians(direction)))) {
+			player.pos_x -= 5 * Math.cos(to_radians(direction));
+			player.pos_z -= 5 * Math.sin(to_radians(direction));
 		}
 		}
 		});
 	shortcut.add( "left", function() { 
-		if (top_view) {
-			if (top_view) {
-				if (orientation == 0 && inBounds(pos_x+5, pos_y, pos_z))
-					pos_x += 5;
-				else if (orientation == 1 && inBounds(pos_x, pos_y, pos_z+5))
-					pos_z += 5;
-				else if (orientation == 2 && inBounds(pos_x-5, pos_y, pos_z))
-					pos_x -= 5;
-				else if (orientation == 3 && inBounds(pos_x, pos_y, pos_z-5))
-					pos_z -= 5;
-
-			}
-		}
+		if (top_view) 
+			top_view_movement(3, player);
 		else {
 			if (animate){
 				if (!block_pivot) {
@@ -218,26 +187,6 @@ function to_radians(angle_in_degrees) {
 	return angle_in_degrees * Math.PI / 180;
 }
 
-function inBounds(x, y, z) {
-	if (Math.abs(x) > 40)
-		return false;
-	if (Math.abs(z) > 40)
-		return false;
-	return true;
-}
-
-function pivot() {
-	if (direction !== stop_angle) {
-		if (turn_right)
-			direction += 5;
-		else
-			direction -= 5;
-	}
-	else {
-		block_pivot = false;
-	}
-}
-
 Animation.prototype.display = function(time)
 	{
 		if(!time) time = 0;
@@ -258,11 +207,11 @@ Animation.prototype.display = function(time)
 		var cam_z_dist = 2.5 * Math.sin(to_radians(direction));
 
 		var eye_x, eye_y, eye_z;
-		eye_x = pos_x - cam_x_dist;
-		eye_y = pos_y + 0.5;
-		eye_z = pos_z - cam_z_dist;
+		eye_x = player.pos_x - cam_x_dist;
+		eye_y = player.pos_y + 0.5;
+		eye_z = player.pos_z - cam_z_dist;
 
-		var at = vec3(pos_x, pos_y, pos_z);
+		var at = vec3(player.pos_x, player.pos_y, player.pos_z);
 		var eye = vec3(eye_x, eye_y, eye_z);
 		var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
 
@@ -270,8 +219,6 @@ Animation.prototype.display = function(time)
 			at = vec3(0, 0, 0);
 			eye = vec3(0, 120, 0);
 		}
-
-
 
 		this.graphicsState.camera_transform = lookAt(eye, at, up);
 		// so this should rotate?
@@ -285,9 +232,35 @@ Animation.prototype.display = function(time)
 		/**********************************
 		Start coding here!!!!
 		**********************************/
-		this.draw_large_board(model_transform, board, obstacle);
-		model_transform = mult(model_transform, translate(pos_x, 3, pos_z));
-		this.m_sphere.draw(this.graphicsState, model_transform, earth);
+		// this.draw_large_board(model_transform, board, obstacle);
+		var stack = new Array();
+		stack.push(model_transform);
+		model_transform = mult(model_transform, translate(-board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2
+												, 0, -board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2));
+		this.draw_board(model_transform);
+		model_transform = stack.pop();
+		stack.push(model_transform);
+		model_transform = mult(model_transform, translate(player.pos_x, player.pos_y, player.pos_z));
+		this.draw_player(model_transform);
+
+		model_transform = stack.pop();
+		stack.push(model_transform);
+		// if (player.bullet_fired) {
+			model_transform = mult(model_transform, translate(bullet.pos_x, bullet.pos_y, bullet.pos_z));
+			this.draw_bullet(model_transform);
+			if (Math.abs(bullet.pos_x) >= 40 || Math.abs(bullet.pos_z) >= 40) {
+				player.bullet_fired = false;
+				bullet.pos_x = player.pos_x;
+				bullet.pos_z = player.pos_z;
+			}
+			if (player.bullet_fired) {
+				top_view_movement(bullet.orientation, bullet);
+			}
+			model_transform = stack.pop();
+			stack.push(model_transform);
+		// }
+
+
 
 	}	
 
@@ -305,64 +278,85 @@ Animation.prototype.update_strings = function( debug_screen_object )		// Strings
 // draws a single board square
 // color to indicates what color the square will be 
 // default board will alternate between darkgreen and green
-Animation.prototype.draw_board_unit = function (model_transform, board, color) {
+Animation.prototype.draw_board_unit = function (model_transform, color) {
 	model_transform = mult(model_transform, scale(board.BOARD_UNIT_SIZE, board.BOARD_UNIT_SIZE/2, board.BOARD_UNIT_SIZE));
 	this.m_cube.draw(this.graphicsState, model_transform, color);
 }
 
-Animation.prototype.draw_board_col = function (model_transform, board, toggle_color) {
+Animation.prototype.draw_board_col = function (model_transform, toggle_color) {
 	// move into z direction
 	for (var i = 0; i < board.BOARD_SIZE; i++) {
 		if (i % 2 == toggle_color)
-			this.draw_board_unit(model_transform, board, board.BOARD_UNIT_COLOR_1);
+			this.draw_board_unit(model_transform, board.BOARD_UNIT_COLOR_1);
 		else
-			this.draw_board_unit(model_transform, board, board.BOARD_UNIT_COLOR_2);
+			this.draw_board_unit(model_transform, board.BOARD_UNIT_COLOR_2);
 		model_transform = mult(model_transform, translate(0, 0, board.BOARD_UNIT_SIZE));
 	}
 	return model_transform;
 }
 
 Animation.prototype.draw_large_board = function (model_transform, board, obstacle) {
-	this.draw_board(model_transform, board, obstacle);
+	this.draw_board(model_transform);
 	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
-	this.draw_board(model_transform, board, obstacle);
+	this.draw_board(model_transform);
 	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
-	this.draw_board(model_transform, board, obstacle);
+	this.draw_board(model_transform);
 	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
-	this.draw_board(model_transform, board, obstacle);
+	this.draw_board(model_transform);
 }
 
-Animation.prototype.draw_board = function (model_transform, board, obstacle) {
+Animation.prototype.draw_board = function (model_transform) {
 	for (var i = 0; i < board.BOARD_SIZE; i++) {
 		if (i % 2 == 0)
-			this.draw_board_col(model_transform, board, 0);
+			this.draw_board_col(model_transform, 0);
 		else {
-			this.draw_board_col(model_transform, board, 1);
+			this.draw_board_col(model_transform, 1);
 			var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/2, 0));
-			this.draw_obstacles_col(up_mt, board, obstacle);
+			this.draw_obstacles_col(up_mt);
 		}
 		model_transform = mult(model_transform, translate(board.BOARD_UNIT_SIZE, 0, 0));
 	}
 	return model_transform;
 }
 
-Animation.prototype.draw_obstacle = function (model_transform, obstacle) {
+Animation.prototype.draw_obstacle = function (model_transform) {
 	model_transform = mult(model_transform, scale(obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE*2, obstacle.OBSTACLE_SIZE));
 	this.m_cube.draw(this.graphicsState, model_transform, obstacle.OBSTACLE_COLOR);
 
 }
 
-Animation.prototype.draw_obstacles_col = function (model_transform, board, obstacle) {
+Animation.prototype.draw_obstacles_col = function (model_transform) {
 	for (var i = 0; i < board.BOARD_SIZE; i++) {
 		if (i % 2 == 1)
-			this.draw_obstacle(model_transform, obstacle);
+			this.draw_obstacle(model_transform);
 		model_transform = mult(model_transform, translate(0, 0, board.BOARD_UNIT_SIZE));
 	}
 	return model_transform;
 }
 
 
-Animation.prototype.draw_obstacle_on_board = function (model_transform, board, obstacle) {
+Animation.prototype.draw_obstacle_on_board = function (model_transform) {
+
+}
+
+Animation.prototype.draw_bullet = function (model_transform) {
+	model_transform = mult(model_transform, scale(bullet.BULLET_RADIUS, bullet.BULLET_RADIUS, bullet.BULLET_RADIUS));
+	this.m_sphere.draw(this.graphicsState, model_transform, bullet.BULLET_COLOR);
+	return model_transform;
+}
+
+Animation.prototype.draw_player = function(model_transform) {
+	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+	this.m_sphere.draw(this.graphicsState, model_transform, new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "earth.gif" ));
+	return model_transform;
+}
+
+function Control() {
+	// controls the game
+
+	// create a board
+	// create a player
+
 
 }
 
@@ -389,15 +383,131 @@ function Board(board_size) {
 				this.board_arr[i][j] = 0; // set as free space
 		}
 	}
+
+	// set the player?
+	this.board_arr[Math.floor(this.BOARD_SIZE/2)][Math.floor(this.BOARD_SIZE/2)] = 2; // set as player in center of board
 }
 
+// grid num: 1
 function Obstacle(board) {
 	this.OBSTACLE_SIZE = board.BOARD_UNIT_SIZE;
 
 	this.OBSTACLE_COLOR = new Material(vec4(0.466667, 0.533333, 0.6, 1), 1, 1, 1, 20);
 }
 
+// general bomber character
 function Character() {
 
 }
 
+// player inherits character
+// grid num: 2
+function Player(x, y, z) {
+	this.pos_x = x;
+	this.pos_y = y;
+	this.pos_z = z;
+
+	this.bullet_fired = false;
+}
+
+
+
+//
+function Bomber() {
+	
+}
+
+function Bullet(x, y, z) {
+	this.pos_x = x;
+	this.pos_y = y;
+	this.pos_z = z;
+
+	this.bullet_orientation = 0;
+
+	this.BULLET_COLOR = new Material (vec4 (.5, .5, 0, 1), 1, 1, 1, 40);
+	this.BULLET_RADIUS = 0.3;
+
+}
+
+function display_coord_to_grid_coord(i) {
+	return -(i/board.BOARD_UNIT_SIZE) + Math.floor(board.BOARD_SIZE/2);
+}
+
+function grid_coord_to_display_coor(i) {
+	return board.BOARD_UNIT_SIZE * (Math.floor(board.BOARD_SIZE/2) - i);
+}
+
+function top_view_movement(o, obj_to_move) {
+	if (o === 0) {
+		if (orientation == 0 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z + board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z += board.BOARD_UNIT_SIZE;
+		else if (orientation == 1 && inBounds(obj_to_move.pos_x - board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x -= board.BOARD_UNIT_SIZE;
+		else if (orientation == 2 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z - board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z -= board.BOARD_UNIT_SIZE;
+		else if (orientation == 3 && inBounds(obj_to_move.pos_x + board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x += board.BOARD_UNIT_SIZE;
+	}
+	else if (o === 1) {
+		if (orientation == 0 && inBounds(obj_to_move.pos_x - board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x -= board.BOARD_UNIT_SIZE;
+		else if (orientation == 1 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z - board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z -= board.BOARD_UNIT_SIZE;
+		else if (orientation == 2 && inBounds(obj_to_move.pos_x + board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x += board.BOARD_UNIT_SIZE;
+		else if (orientation == 3 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z + board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z += board.BOARD_UNIT_SIZE;
+	}
+	else if (o === 2) {
+		if (orientation == 0 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z - board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z -= board.BOARD_UNIT_SIZE;
+		else if (orientation == 1 && inBounds(obj_to_move.pos_x + board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x += board.BOARD_UNIT_SIZE;
+		else if (orientation == 2 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z + board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z += board.BOARD_UNIT_SIZE;
+		else if (orientation == 3 && inBounds(obj_to_move.pos_x - board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x -= board.BOARD_UNIT_SIZE;
+	}
+	else if (o === 3) {
+		if (orientation == 0 && inBounds(obj_to_move.pos_x + board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x += board.BOARD_UNIT_SIZE;
+		else if (orientation == 1 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z + board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z += board.BOARD_UNIT_SIZE;
+		else if (orientation == 2 && inBounds(obj_to_move.pos_x - board.BOARD_UNIT_SIZE, obj_to_move.pos_y, obj_to_move.pos_z))
+			obj_to_move.pos_x -= board.BOARD_UNIT_SIZE;
+		else if (orientation == 3 && inBounds(obj_to_move.pos_x, obj_to_move.pos_y, obj_to_move.pos_z - board.BOARD_UNIT_SIZE))
+			obj_to_move.pos_z -= board.BOARD_UNIT_SIZE;
+	}
+}
+
+
+function inBounds(x, y, z) {
+	console.log(display_coord_to_grid_coord(x) + ", " + display_coord_to_grid_coord(z));
+	if (Math.abs(x) > 40)
+		return false;
+	if (Math.abs(z) > 40)
+		return false;
+	if (isObstacleAt(display_coord_to_grid_coord(x), display_coord_to_grid_coord(z)))
+		return false;
+	return true;
+}
+
+function isObstacleAt(x, z) {
+	return x % 2 === 1 && z % 2 === 1;
+}
+
+function pivot() {
+	if (direction !== stop_angle) {
+		if (turn_right)
+			direction += 5;
+		else
+			direction -= 5;
+	}
+	else {
+		block_pivot = false;
+	}
+}
+
+function smooth_walk() {
+
+}
