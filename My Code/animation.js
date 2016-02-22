@@ -22,7 +22,7 @@ var forward = false;
 var direction = 90; 
 var orientation = 0; // {0, 1, 2, 3} = {up, right, down, left}
 
-var board = new Board(17); // set up 17x17 board
+var board = new Board(9); // set up 17x17 board
 var obstacle = new Obstacle(board);
 var player = new Player(0, board.BOARD_UNIT_SIZE/2, 0);
 
@@ -56,6 +56,7 @@ function Animation()
 		self.m_cylinder = new cylindrical_strip( 10, mat4() );
 		self.m_triangle = new triangle( mat4() );
 		self.m_angled_cylinder = new angled_cylinder(10, mat4() );
+		self.m_half_sphere = new half_sphere(mat4(), 4);
 		
 		// 1st parameter is camera matrix.  2nd parameter is the projection:  The matrix that determines how depth is treated.  It projects 3D points onto a plane.
 		self.graphicsState = new GraphicsState( translate(0, 0,-40), perspective(45, canvas.width/canvas.height, .1, 1000), 0 );
@@ -196,34 +197,33 @@ Animation.prototype.display = function(time)
 		if(animate) this.graphicsState.animation_time += this.animation_delta_time;
 		prev_time = time;
 		
-		//update_camera( this, this.animation_delta_time );
+		// update_camera( this, this.animation_delta_time );
 			
 		this.basis_id = 0;
 		
 		var model_transform = mat4();
-		model_transform = mult(model_transform, scale(10, 10, 10));
 
-		// if (block_pivot)
-		// 	pivot();
+		if (block_pivot)
+			pivot();
 
-		// var cam_x_dist = 2.5 * Math.cos(to_radians(direction));
-		// var cam_z_dist = 2.5 * Math.sin(to_radians(direction));
+		var cam_x_dist = 2.5 * Math.cos(to_radians(direction));
+		var cam_z_dist = 2.5 * Math.sin(to_radians(direction));
 
-		// var eye_x, eye_y, eye_z;
-		// eye_x = player.pos_x - cam_x_dist;
-		// eye_y = player.pos_y + 0.5;
-		// eye_z = player.pos_z - cam_z_dist;
+		var eye_x, eye_y, eye_z;
+		eye_x = player.pos_x - cam_x_dist;
+		eye_y = player.pos_y + 0.5;
+		eye_z = player.pos_z - cam_z_dist;
 
-		// var at = vec3(player.pos_x, player.pos_y, player.pos_z);
-		// var eye = vec3(eye_x, eye_y, eye_z);
-		// var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
+		var at = vec3(player.pos_x, player.pos_y, player.pos_z);
+		var eye = vec3(eye_x, eye_y, eye_z);
+		var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
 
-		// if (top_view) {
-		// 	at = vec3(0, 0, 0);
-		// 	eye = vec3(0, 120, 0);
-		// }
+		if (top_view) {
+			at = vec3(0, 0, 0);
+			eye = vec3(0, 120, 0);
+		}
 
-		// this.graphicsState.camera_transform = lookAt(eye, at, up);
+		this.graphicsState.camera_transform = lookAt(eye, at, up);
 		// so this should rotate?
 
 		
@@ -231,27 +231,37 @@ Animation.prototype.display = function(time)
 			greyPlastic = new Material( vec4( .5,.5,.5,1 ), 1, 1, .5, 20 ),
 			earth = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "earth.gif" ),
 			stars = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "stars.png" );
-				this.m_cube.draw(this.graphicsState, model_transform, earth);
-			
+
+		var stack = new Array();
+		stack.push(model_transform);
+
+
+
+
+
+
 		/**********************************
 		Start coding here!!!!
 		**********************************/
-		// this.draw_large_board(model_transform, board, obstacle);
-		// var stack = new Array();
-		// stack.push(model_transform);
-		// model_transform = mult(model_transform, translate(-board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2
-		// 										, 0, -board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2));
-		// this.draw_board(model_transform);
-		// model_transform = stack.pop();
-		// stack.push(model_transform);
-		// model_transform = mult(model_transform, translate(player.pos_x, player.pos_y, player.pos_z));
+		this.draw_large_board(model_transform, board, obstacle);
+		var stack = new Array();
+		stack.push(model_transform);
+		model_transform = mult(model_transform, translate(-board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2
+												, 0, -board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2));
+		this.draw_board(model_transform);
+		model_transform = stack.pop();
+		stack.push(model_transform);
+		model_transform = mult(model_transform, translate(player.pos_x, player.pos_y, player.pos_z));
 		// this.draw_player(model_transform);
+		model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+		this.draw_character(model_transform,greyPlastic);
+		model_transform = mult(model_transform, scale(2, 2, 2));
 
 		// model_transform = stack.pop();
 		// stack.push(model_transform);
 		// // if (player.bullet_fired) {
 		// 	model_transform = mult(model_transform, translate(bullet.pos_x, bullet.pos_y, bullet.pos_z));
-		// 	this.draw_bullet(model_transform);
+		// 	// this.draw_bullet(model_transform);
 		// 	if (Math.abs(bullet.pos_x) >= 40 || Math.abs(bullet.pos_z) >= 40) {
 		// 		player.bullet_fired = false;
 		// 		bullet.pos_x = player.pos_x;
@@ -262,7 +272,7 @@ Animation.prototype.display = function(time)
 		// 	}
 		// 	model_transform = stack.pop();
 		// 	stack.push(model_transform);
-		// }
+		// // }
 
 	}	
 
@@ -273,6 +283,174 @@ Animation.prototype.update_strings = function( debug_screen_object )		// Strings
 	debug_screen_object.string_map["animate"] = "Animation " + (animate ? "on" : "off") ;
 	debug_screen_object.string_map["thrust"] = "Thrust: " + thrust;
 	debug_screen_object.string_map["direction]"] = "Direction: " + direction;
+}
+
+Animation.prototype.draw_character = function (model_transform, color) {
+		var stack = new Array();
+		stack.push(model_transform);
+		// head
+		this.m_sphere.draw(this.graphicsState, model_transform, color);
+		model_transform = mult(model_transform, translate(0, -1.75, 0));
+
+		// body
+		this.draw_body(model_transform, color);
+		model_transform = mult(model_transform, translate(0, -1, 0));
+		this.draw_bottom_half_sphere(model_transform, color);
+		model_transform = mult(model_transform, translate(-0.5, 0, 0));
+
+		// legs
+		this.draw_leg(model_transform, color);
+		model_transform = mult(model_transform, translate(1, 0, 0));
+		this.draw_leg(model_transform, color);
+
+		model_transform = stack.pop();
+		// arms?
+		model_transform = mult(model_transform, translate(-0.4, -1, 0));
+		model_transform = mult(model_transform, rotate(-30, 0, 0, 1));
+		this.draw_arm_right(model_transform, color);
+
+		model_transform = mult(model_transform, rotate(30, 0, 0, 1));
+		model_transform = mult(model_transform, translate(0.8, 0, 0));
+		model_transform = mult(model_transform, rotate(30, 0, 0, 1));
+		this.draw_arm_left(model_transform, color);
+
+}
+
+Animation.prototype.draw_knee_cap = function (model_transform, color) {
+	model_transform = mult(model_transform, scale(0.25, 0.25, 0.25)); // half of the tilted cylinder radius
+	this.m_sphere.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_upper_leg = function (model_transform, color) {
+	model_transform = mult(model_transform, scale(0.5, 1, 0.5));
+	this.draw_inverted_angled_cylinder(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_lower_leg = function(model_transform, color) {
+	model_transform = mult(model_transform, scale(0.25, 0.75, 0.25));
+	this.draw_inverted_angled_cylinder(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_leg = function(model_transform, color) {
+	model_transform = mult(model_transform, translate(0, -1, 0));
+	this.draw_upper_leg(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -1, 0));
+	this.draw_knee_cap(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -0.75, 0));
+	this.draw_lower_leg(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -0.75, 0.25));
+	this.draw_foot(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_shoulder = function (model_transform, color) {
+	model_transform = mult(model_transform, scale(0.25, 0.25, 0.25)); // half of the tilted cylinder radius
+	this.m_sphere.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_upper_arm = function (model_transform, color) {
+	model_transform = mult(model_transform, scale(0.5, 1.25, 0.5));
+	this.draw_inverted_angled_cylinder(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_lower_arm = function(model_transform, color) {
+	model_transform = mult(model_transform, scale(0.25, 1.25, 0.25));
+	this.draw_inverted_angled_cylinder(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_hand = function(model_transform, color) {
+	model_transform = mult(model_transform, scale(0.25, 0.25, 0.25));
+	this.m_sphere.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_arm_left = function(model_transform, color) {
+	this.draw_shoulder(model_transform, color);
+	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_upper_arm(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_shoulder(model_transform, color);
+	model_transform = mult(model_transform, rotate(-10, 0, 0, 1));
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_lower_arm(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_hand(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_arm_right = function(model_transform, color) {
+	this.draw_shoulder(model_transform, color);
+	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_upper_arm(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_shoulder(model_transform, color);
+	model_transform = mult(model_transform, rotate(10, 0, 0, 1));
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_lower_arm(model_transform, color);
+	model_transform = mult(model_transform, translate(0, -1.25, 0));
+	this.draw_hand(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_body = function(model_transform, color) {
+	// model_transform = mult(model_transform, scale(1, 0.75, 1));
+	this.draw_angled_cylinder(model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_angled_cylinder = function(model_transform, color) {
+	model_transform = mult(model_transform, rotate(270, 1, 0, 0));
+	this.m_angled_cylinder.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_inverted_angled_cylinder = function(model_transform, color) {
+	model_transform = mult(model_transform, rotate(90, 1, 0, 0));
+	this.m_angled_cylinder.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_cylinder = function(model_transform, color) {
+	model_transform = mult(model_transform, rotate(270, 1, 0, 0));
+	this.m_cylinder.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_bottom_half_sphere = function (model_transform, color) {
+	model_transform = mult(model_transform, rotate(180, 0, 0, 1));
+	this.m_half_sphere.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
+}
+
+Animation.prototype.draw_foot = function (model_transform, color) {
+	// model_transform = mult(model_transform, rotate())
+	model_transform = mult(model_transform, scale(0.2, 0.1, 0.4));
+	this.m_sphere.draw(this.graphicsState, model_transform, color);
+
+	return model_transform;
 }
 
 // draws a single board square

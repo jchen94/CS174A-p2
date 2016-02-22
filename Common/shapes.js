@@ -573,3 +573,195 @@ function text_line( string )		// Draws a rectangle textured with images of ASCII
 
 	}
 inherit(text_line, shape);
+
+function triangle( points_transform )    // Argument points_transform: Always identity if we’re just building a triangle.  It does good when building other 
+                                            // compound shapes by populating them with a pre-transformed triangle
+{    
+    shape.call(this);        // Inherit class shape’s array members by calling parent constructor
+    if( !arguments.length) return;    // Pass no arguments if you just want to make an empty dummy object that inherits everything, for populating other shapes
+    this.populate( this, points_transform );            // Otherwise, a new triangle immediately populates its own arrays with triangle points,
+    this.init_buffers();                        // Then sends its arrays to the graphics card into new buffers
+}
+inherit(triangle, shape);
+    triangle.prototype.populate = function( recipient, points_transform )        // The meat of the triangle starts here:
+    {
+        var offset = recipient.vertices.length;        var index_offset = recipient.indices.length;                // Recipient's previous size
+            
+        recipient.vertices.push( vec3(0,0,0), vec3(0,1,0), vec3(1,0,0) );
+        recipient.normals.push( vec3(0,0,1), vec3(0,0,1), vec3(0,0,1) );
+        recipient.texture_coords.push( vec2(0,0), vec2(0,1), vec2(1,0) );
+        recipient.indices.push( offset + 0, offset + 1, offset + 2 );
+                        
+        for( var i = offset; i < recipient.vertices.length; i++ )                // Apply points_transform to those points added during this call 
+                recipient.vertices[i] = vec3( mult_vec( points_transform, vec4( recipient.vertices[ i ], 1 ) ) );    
+    };
+
+function angled_cylinder( num_tris, points_transform )		// Arrange triangles in a fan.  This version goes all the way around a circle with them.
+	{	
+		shape.call(this);	
+		
+		this.createCircleVertices = function( recipient, num_tris ) 
+			{	
+				for( var counter = 0; counter++ <= num_tris;   )
+				{
+						recipient.vertices.push( vec3( Math.cos(2 * Math.PI * counter/num_tris), Math.sin(2 * Math.PI * counter/num_tris), -1 ) );		
+						recipient.texture_coords.push( vec2( counter/num_tris, 1 ) );	
+				}
+			}
+		
+		this.createTopCircleVertices = function(recipient, num_tris)
+		{
+			for (var counter = 0; counter++ <= num_tris;) {
+				recipient.vertices.push( vec3(0.5 * Math.cos(2* Math.PI * counter/num_tris), 0.5 * Math.sin(2 * Math.PI * counter/num_tris), 1 ) );
+				recipient.texture_coords.push( vec2( counter/num_tris, 1 ) );	
+			}
+		}
+
+		this.initFromSequence = function( recipient, center_idx, num_tris, offset )
+			{	
+				for(var index = offset; index <= offset + num_tris;	 )
+				{
+					recipient.indices.push( index );
+					recipient.indices.push( index + num_tris + 1);
+					recipient.indices.push( index + 1 );
+
+					recipient.indices.push(index + num_tris + 1);
+					recipient.indices.push(++index);
+					recipient.indices.push(index + num_tris + 1);
+				}
+
+				recipient.indices.pop(); 
+				recipient.indices.push( offset );
+			}
+		
+		if( !arguments.length) return;	// Pass no arguments if you just want to statically call functions up the inheritance chain, and / or populate()
+		this.populate( this, num_tris, points_transform );
+		this.init_buffers();
+	}
+inherit(angled_cylinder, shape);
+
+	angled_cylinder.prototype.populate = function( recipient, num_tris, points_transform, center_idx )
+		{
+			// if( center_idx === undefined )			// Not re-using a point?  Create one.
+			// {
+			// 	center_idx = recipient.vertices.push( vec3( mult_vec( points_transform, vec4( 0,0,1,1 ) ) ) ) - 1;
+			// 	recipient.texture_coords.push( vec2( 1, 0 ) );
+			// }				
+			var offset = recipient.vertices.length;		var index_offset = recipient.indices.length;				
+			
+			this.createCircleVertices( recipient, num_tris );
+			this.createTopCircleVertices(recipient, num_tris);
+			this.initFromSequence(	   recipient, center_idx, num_tris, offset );
+			
+			recipient.flat_normals_from_triples( index_offset );	
+		
+			for( var i = offset; i < recipient.vertices.length; i++ )
+				recipient.vertices[i] = vec3( mult_vec( points_transform, vec4( recipient.vertices[ i ], 1 ) ) );	
+		};
+
+function half_sphere( points_transform, max_subdivisions )		// Build a sphere using subdivision, starting with a tetrahedron.  Store each level of detail in separate index lists.
+	{	
+		shape.call(this);	
+			
+		this.subdivideTriangle = function( a, b, c, recipient, count ) 
+		{	
+			if( count <= 0)
+			{		
+				recipient.indices.push(a,b,c);		// Build index list with the nice property that skipping every fourth vertex index takes you down one level of detail, each time				
+				return;
+			}
+			else if( recipient.indices_LOD && recipient.indices_LOD[count] )
+				recipient.indices_LOD[count].push(a,b,c);
+			
+			var ab_vert = normalize( mix( recipient.vertices[a], recipient.vertices[b], 0.5) );
+			var ac_vert = normalize( mix( recipient.vertices[a], recipient.vertices[c], 0.5) );
+			var bc_vert = normalize( mix( recipient.vertices[b], recipient.vertices[c], 0.5) );	
+						
+			var ab = recipient.vertices.length;		recipient.vertices.push( ab_vert );	
+			var ac = recipient.vertices.length;		recipient.vertices.push( ac_vert );	
+			var bc = recipient.vertices.length;		recipient.vertices.push( bc_vert );	
+
+			this.subdivideTriangle( a, ab, ac,  recipient, count - 1 );
+			this.subdivideTriangle( ab, b, bc,  recipient, count - 1 );
+			this.subdivideTriangle( ac, bc, c,  recipient, count - 1 );
+			this.subdivideTriangle( ab, bc, ac, recipient, count - 1 );
+		}
+		
+		if( !arguments.length) return;	// Pass no arguments if you just want to statically call functions up the inheritance chain, and / or populate()
+		
+		this.indices_LOD = [];
+		this.index_buffer_LOD = [];
+		for( var i = 1; i <= max_subdivisions; i++ )
+			this.indices_LOD[i] = [];
+		
+		this.populate( this, points_transform, max_subdivisions );
+		
+		for( var i = 1; i <= max_subdivisions; i++ )
+		{
+			this.index_buffer_LOD[i] = gl.createBuffer();
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.index_buffer_LOD[ i ] );
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array( this.indices_LOD[ i ] ), gl.STATIC_DRAW);
+		}
+		
+		this.draw = function( graphicsState, model_transform, material, LOD ) 	
+		{ 	
+			this.update_uniforms( graphicsState, model_transform, material );
+
+			if( material.texture_filename && textures[ material.texture_filename ].loaded )			// Use a non-existent texture string parameter to signal that we don't want to texture this shape.
+			{
+				g_addrs.shader_attributes[2].enabled = true;
+				gl.uniform1f ( g_addrs.USE_TEXTURE_loc, 1 );
+				gl.bindTexture(gl.TEXTURE_2D, textures[ material.texture_filename ].id);
+			}
+			else
+				{	gl.uniform1f ( g_addrs.USE_TEXTURE_loc, 0 );		g_addrs.shader_attributes[2].enabled = false;	}
+			
+			for( var i = 0, it = g_addrs.shader_attributes[0]; i < g_addrs.shader_attributes.length, it = g_addrs.shader_attributes[i]; i++ )
+				if( it.enabled )
+				{
+					gl.enableVertexAttribArray( it.index );
+					gl.bindBuffer( gl.ARRAY_BUFFER, this.graphics_card_buffers[i] );
+					gl.vertexAttribPointer( it.index, it.size, it.type, it.normalized, it.stride, it.pointer );
+				}
+				else
+					gl.disableVertexAttribArray( it.index );
+				
+			if( LOD === undefined || LOD < 0 || LOD + 1 >= this.indices_LOD.length )
+			{
+				gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.index_buffer );
+				gl.drawElements( gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0 );
+			}
+			else
+			{
+				gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.index_buffer_LOD[ this.indices_LOD.length - 1 - LOD ] );
+				gl.drawElements( gl.TRIANGLES, this.indices_LOD[ this.indices_LOD.length - 1 - LOD ].length, gl.UNSIGNED_SHORT, 0 );
+			}			
+		}
+		this.init_buffers();
+	}
+inherit(half_sphere, shape);
+
+	half_sphere.prototype.populate = function ( recipient, points_transform, max_subdivisions ) 
+		{	
+			var offset = recipient.vertices.length;
+			recipient.vertices.push(		vec3(0.0, 0.0, -1.0) 				 );
+			recipient.vertices.push(		vec3(0.0, 0.942809, 0.333333) 		 );
+			recipient.vertices.push(		vec3(-0.816497, -0.471405, 0.333333) );
+			recipient.vertices.push(		vec3(0.816497, -0.471405, 0.333333)  );
+			
+			this.subdivideTriangle( 0 + offset, 1 + offset, 2 + offset, recipient, max_subdivisions);
+			this.subdivideTriangle( 3 + offset, 2 + offset, 1 + offset, recipient, max_subdivisions);
+			this.subdivideTriangle( 1 + offset, 0 + offset, 3 + offset, recipient, max_subdivisions);
+			this.subdivideTriangle( 0 + offset, 2 + offset, 3 + offset, recipient, max_subdivisions); 
+			
+			for( var i = offset; i < recipient.vertices.length; i++ )
+			{
+				recipient.spherical_texture_coords( i );
+				recipient.normals[i] = recipient.vertices[i].slice();
+				// recipient.vertices[i] = vec3( mult_vec( points_transform, vec4( recipient.vertices[i], 1 ) ) );	
+				if (recipient.vertices[i][1] > 0)	// All vertices with negative y coords get collapsed to y = 0
+                recipient.vertices[i] = vec3(mult_vec(points_transform, vec4(recipient.vertices[i], 1)));
+            else
+                recipient.vertices[i] = vec3(mult_vec(points_transform, vec4(recipient.vertices[i][0], 0, recipient.vertices[i][2], 1)));
+			}
+		};
