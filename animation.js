@@ -245,7 +245,7 @@ Animation.prototype.display = function(time)
 		// model_transform = stack.pop();
 		// stack.push(model_transform);
 		// model_transform = mult(model_transform, translate(player.pos_x, player.pos_y, player.pos_z));
-		// this.draw_player(model_transform);
+		this.draw_player(model_transform);
 
 		// model_transform = stack.pop();
 		// stack.push(model_transform);

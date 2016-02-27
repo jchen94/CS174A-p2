@@ -605,7 +605,7 @@ function angled_cylinder( num_tris, points_transform )		// Arrange triangles in 
 				for( var counter = 0; counter++ <= num_tris;   )
 				{
 						recipient.vertices.push( vec3( Math.cos(2 * Math.PI * counter/num_tris), Math.sin(2 * Math.PI * counter/num_tris), -1 ) );		
-						recipient.texture_coords.push( vec2( counter/num_tris, 1 ) );	
+						recipient.texture_coords.push( vec2(counter/num_tris, 0) );	
 				}
 			}
 		
@@ -613,7 +613,7 @@ function angled_cylinder( num_tris, points_transform )		// Arrange triangles in 
 		{
 			for (var counter = 0; counter++ <= num_tris;) {
 				recipient.vertices.push( vec3(0.5 * Math.cos(2* Math.PI * counter/num_tris), 0.5 * Math.sin(2 * Math.PI * counter/num_tris), 1 ) );
-				recipient.texture_coords.push( vec2( counter/num_tris, 1 ) );	
+				recipient.texture_coords.push( vec2(counter/num_tris, 1) );	
 			}
 		}
 
