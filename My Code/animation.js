@@ -12,7 +12,8 @@ var canvas, canvas_size, gl = null, g_addrs,
 
 		var purplePlastic = new Material( vec4( .9,.5,.9,1 ), 1, 1, 1, 40 ), // Omit the string parameter if you want no texture
 			greyPlastic = new Material( vec4( .5,.5,.5,1 ), 1, 1, .5, 20 ),
-			blue = new Material(vec4(0, 0, 1,1), 1, 1, 1, 20),
+			blue = new Material(vec4(0, 0, 1, 0.5), 1, 1, 1, 20),
+			yellow = new Material(vec4(1, 1, 0, 0.5), 1, 1, 1, 20),
 			skin = new Material(vec4(1, 0.921569, 0.803922,1), 1, 1, 1, 20),
 			red = new Material( vec4 (1, 0, 0, 1), 1, 1, 1, 20),
 			earth = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "earth.gif" ),
@@ -22,7 +23,8 @@ var canvas, canvas_size, gl = null, g_addrs,
 			sky = new Material (vec4(0.9, 0.9, 0.9, 1), 1, 0, 0, 30, "sky.jpg"),
 			dark_grass = new Material (vec4(0.7, 0.9, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg"),
 			light_grass = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg"),
-			wood = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "tree.jpg");
+			wood = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "tree.jpg"),
+			metal = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "metal.jpg");
 
 var my_delta_time = 0;
 var moved = 0;
@@ -68,6 +70,9 @@ var flower = new Flower();
 var board_x_bound, board_z_bound = board.BOARD_SIZE * board.BOARD_UNIT_SIZE;
 var death_delta = 0;
 var death_cam_dist = 2.5;
+var death_angle = 0;
+var velocity = 1;
+var game_delta = 0;
 
 var music = {};
 
@@ -133,7 +138,19 @@ function Animation()
 		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
 		music["mine"] = new_music
 
+		new_music = new Audio("abduction.mp3")
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["abduction"] = new_music
 
+		new_music = new Audio("blast_off.mp3")
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["blast_off"] = new_music
+
+		self.GAME_OVER_UI = new GraphicsState(mat4(), mat4(), 0);
+		self.m_text = new text_line(50); 
+		self.m_text.set_string("GAME OVER. Press Enter to Retry.");
 		
 		// 1st parameter is camera matrix.  2nd parameter is the projection:  The matrix that determines how depth is treated.  It projects 3D points onto a plane.
 		self.graphicsState = new GraphicsState( translate(0, 0,-40), perspective(45, canvas.width/canvas.height, .1, 1000), 0 );
@@ -150,7 +167,22 @@ function Animation()
 // init_keys():  Define any extra keyboard shortcuts here
 Animation.prototype.init_keys = function()
 {
-	shortcut.add( "Space", function() { thrust[1] = -1; } );			shortcut.add( "Space", function() { thrust[1] =  0; }, {'type':'keyup'} );
+	// shortcut.add( "Space", function() { thrust[1] = -1; } );			
+	// shortcut.add( "Space", function() { thrust[1] =  0; }, {'type':'keyup'} );
+	shortcut.add ("Space", function() {
+		if (!player.bullet_fired) {
+			music["shoot"].currentTime = 0; 
+			music["shoot"].play();
+			player.bullet_fired = true;
+			bullet.pos_x = player.pos_x;
+			bullet.pos_z = player.pos_z;
+			bullet.direction = direction;
+		}
+	});
+	shortcut.add("Enter", function() {
+		animate = true; 
+		reset_game();
+		game_state = 2; })
 	shortcut.add( "z",     function() { thrust[1] =  1; } );			shortcut.add( "z",     function() { thrust[1] =  0; }, {'type':'keyup'} );
 	shortcut.add( "w",     function() { thrust[2] =  1; } );			shortcut.add( "w",     function() { thrust[2] =  0; }, {'type':'keyup'} );
 	shortcut.add( "a",     function() { thrust[0] =  1; } );			shortcut.add( "a",     function() { thrust[0] =  0; }, {'type':'keyup'} );
@@ -166,9 +198,9 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+g", function() { gouraud = !gouraud;				gl.uniform1i( g_addrs.GOURAUD_loc, gouraud);	} );
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
-	shortcut.add( "0", function() { music[0].play(); })
+	shortcut.add( "0", function() { music["wii"].play(); })
 	shortcut.add( "9", function() { walk_in_place(); })
-	shortcut.add( "7", function() { 
+	shortcut.add( "m", function() { 
 		if (player.mines > 0) {
 			player.mines--;
 			player.mines_arr[player.mines];
@@ -277,7 +309,7 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+Space", function() { top_view = !top_view; } );
 	
 	shortcut.add( "p",     ( function(self) { return function() { self.m_axis.basis_selection++; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );
-	shortcut.add( "m",     ( function(self) { return function() { self.m_axis.basis_selection--; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );	
+	// shortcut.add( "m",     ( function(self) { return function() { self.m_axis.basis_selection--; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );	
 }
 
 function update_camera( self, animation_delta_time )
@@ -314,7 +346,8 @@ Animation.prototype.display = function(time)
 		this.animation_delta_time = time - prev_time;
 		if(animate) this.graphicsState.animation_time += this.animation_delta_time;
 		prev_time = time;
-		
+		game_delta += this.animation_delta_time;
+
 		if (game_state === 0)
 			update_camera( this, this.animation_delta_time );
 			
@@ -356,7 +389,7 @@ Animation.prototype.display = function(time)
 
 			var eye_x, eye_y, eye_z;
 			eye_x = player.pos_x - cam_x_dist;
-			eye_y = player.pos_y + 0.5;
+			eye_y = player.pos_y + death_cam_dist/10;
 			eye_z = player.pos_z - cam_z_dist;
 
 			var at = vec3(player.pos_x, player.pos_y, player.pos_z);
@@ -374,11 +407,23 @@ Animation.prototype.display = function(time)
 		/**********************************
 		Start coding here!!!!
 		**********************************/
+
+		var mt = mult(new mat4(), rotate(-90, vec3(0,1,0)));
+			mt = mult( mt, translate( .1, -.9, .9 ) );
+			mt = mult(model_transform, scale(100, 0.75, 0.05));
+			this.m_text.draw(this.GAME_OVER_UI, mt, true, vec4(1,1,1,1));
+
+
+
 		var stack = new Array();
 		stack.push(model_transform);
 
-	// if (game_state === 2) {
+	if (game_state > 1) {
 		this.draw_sky(model_transform);
+
+		if (game_state === 2 && Math.round(game_delta) % 100 == 0) {
+			spawn_enemy();
+		}
 
 
 		model_transform = stack.pop();
@@ -391,8 +436,16 @@ Animation.prototype.display = function(time)
 		stack.push(model_transform);
 		model_transform = mult(model_transform, translate(player.pos_x, player.pos_y, player.pos_z));
 
+		// draw character
 		model_transform = mult(model_transform, rotate(-direction + 90, 0, 1, 0));
-		this.draw_character(model_transform, greyPlastic);
+
+		if (game_state === 3) {
+			death_angle += this.animation_delta_time * 0.06;
+			model_transform = mult(model_transform, rotate(death_angle, 1, 1, 1));
+		}
+
+		if (game_state === 2 || game_state === 3)
+			this.draw_character(model_transform, greyPlastic);
 
 		// draw mines
 		model_transform = stack.pop();
@@ -501,7 +554,6 @@ Animation.prototype.display = function(time)
 						player.mines_arr[j].spawned && 
 						display_coord_to_grid_coord(board.enemy_arr[i].pos_x) === display_coord_to_grid_coord(player.mines_arr[j].pos_x) &&
 						display_coord_to_grid_coord(board.enemy_arr[i].pos_z) === display_coord_to_grid_coord(player.mines_arr[j].pos_z)) {
-						console.log("ENEMY DESTROYED");
 						player.mines_arr[j].spawned = false;
 						board.enemy_arr[i].spawned = false;
 						player.score += 10;
@@ -524,7 +576,6 @@ Animation.prototype.display = function(time)
 				if (board.enemy_arr[i].spawned && 
 					display_coord_to_grid_coord(board.enemy_arr[i].pos_x) === display_coord_to_grid_coord(bullet.pos_x) &&
 					display_coord_to_grid_coord(board.enemy_arr[i].pos_z) === display_coord_to_grid_coord(bullet.pos_z)) {
-					console.log("ENEMY DESTROYED");
 					player.bullet_fired = false;
 					board.enemy_arr[i].spawned = false;
 					player.score += 10;
@@ -549,18 +600,50 @@ Animation.prototype.display = function(time)
 			bullet.pos_x = player.pos_x;
 			bullet.pos_y = player.pos_y;
 			bullet.pos_z = player.pos_z;
-			// model_transform = mult(model_transform, translate(bullet.pos_x, bullet.pos_y, bullet.pos_z));
-			// this.draw_bullet(model_transform);
 		}
 
-	// } // END GAME PLAY 2
+	} // END GAME PLAY 2
 
 	if (game_state === 3) {
+		var space = mult(model_transform, translate(player.pos_x, 14, player.pos_z));
+		this.draw_space_ship(space);
+
+		var ray_tm = mult(model_transform, translate(player.pos_x, 7, player.pos_z));
+		this.draw_ray(ray_tm);
+
 		death_delta += this.animation_delta_time;
-		if (death_delta > 1000 && death_delta < 5000) {
+		if (death_delta > 2000 && death_delta < 5700) {
+			music["abduction"].play();
 			player.pos_y += 0.06 * 0.05 * this.animation_delta_time
 		}
+		if (death_delta > 6000) {
+			game_state = 4
+		}
 	}
+
+	if (game_state === 4) {
+		var space = mult(model_transform, translate(player.pos_x, 14, player.pos_z));
+		this.draw_space_ship(space);
+
+		if (death_delta > 6500 && death_delta < 7000)
+			music["blast_off"].play();
+
+		death_delta += this.animation_delta_time;
+		if (death_delta > 7000) {
+			player.pos_x += 0.06 * 0.05 * this.animation_delta_time * velocity;
+			player.pos_y += 0.06 * 0.05 * this.animation_delta_time * velocity;
+			player.pos_z += 0.06 * 0.05 * this.animation_delta_time * velocity;
+			velocity += 0.1 * this.animation_delta_time;
+
+		}
+		if (death_delta > 8000) {
+			var mt = mult(mat4(), rotate(0, vec3(0,1,0)));
+			mt = mult(model_transform, scale(1, 0.75, 0.05));
+			this.m_text.draw(this.GAME_OVER_UI, mt, true, vec4(1,1,1,1));
+			music["blast_off"].pause();
+		}
+	}
+
 
 
 		
@@ -579,6 +662,15 @@ Animation.prototype.update_strings = function( debug_screen_object )		// Strings
 	debug_screen_object.string_map["mines"] = "Mines available: " + player.mines;
 	debug_screen_object.string_map["thrust"] = "Thrust: " + thrust;
 	debug_screen_object.string_map["direction]"] = "Direction: " + direction;
+
+	if (game_state === 4) {
+		debug_screen_object.end_game = "GAME OVER!!";
+		debug_screen_object.try_again = "Press Enter to play again!"
+	}
+	else {
+		debug_screen_object.end_game = "";
+		debug_screen_object.try_again = ""
+	}
 }
 
 Animation.prototype.draw_sky = function (model_transform) {
@@ -953,6 +1045,28 @@ Animation.prototype.draw_tree = function (model_transform) {
 	this.draw_tree_segment(model_transform, dark_grass);
 }
 
+Animation.prototype.draw_space_ship = function (model_transform) {
+	this.draw_outer_space_ship(model_transform);
+	model_transform = mult(model_transform, translate(0,1,0));
+	this.draw_center_space_ship(model_transform);
+
+}
+
+Animation.prototype.draw_outer_space_ship = function(model_transform) {
+	model_transform = mult(model_transform, scale(5, 1, 5));
+	this.m_sphere.draw(this.graphicsState, model_transform, metal);
+}
+
+Animation.prototype.draw_center_space_ship = function(model_transform) {
+	model_transform = mult(model_transform, scale(3, 1, 3));
+	this.m_sphere.draw(this.graphicsState, model_transform, blue);
+}
+
+Animation.prototype.draw_ray = function (model_transform) {
+	model_transform = mult(model_transform, scale(3, 7, 3));
+	this.draw_angled_cylinder(model_transform, yellow);
+}
+
 function Control() {
 	// controls the game
 
@@ -1066,6 +1180,25 @@ function Player(x, y, z) {
 
 }
 
+function reset_game() {
+	player.pos_x = 0;
+	player.pos_y = board.BOARD_UNIT_SIZE/2 + 0.5;
+	player.pos_z = 0;
+	player.direction = 0;
+	player.score = 0;
+	player.mines = 3;
+	player.dead = false;
+	for (var i = 0; i < board.MAX_ENEMIES; i++) {
+		board.enemy_arr[i].pos_x = 0;
+		board.enemy_arr[i].pos_y = 0;
+		board.enemy_arr[i].pos_z = 0;
+		board.enemy_arr[i].direction = 0;
+		board.enemy_arr[i].steps = 0;
+		board.enemy_arr[i].spawned = false;
+
+	}
+}
+
 function Mine() {
 	this.pos_x = 0;
 	this.pos_y = 0;
@@ -1164,9 +1297,9 @@ function spawn_enemy() {
  		if (!board.enemy_arr[i].spawned)
  		{
  			board.enemy_arr[i].spawned = true;
- 			board.enemy_arr[i].pos_x = grid_coord_to_display_coord(2);
+ 			board.enemy_arr[i].pos_x = grid_coord_to_display_coord(0);
  			board.enemy_arr[i].pos_y = board.BOARD_UNIT_SIZE/2;
- 			board.enemy_arr[i].pos_z = grid_coord_to_display_coord(4);
+ 			board.enemy_arr[i].pos_z = grid_coord_to_display_coord(0);
  			board.enemy_arr[i].steps = 2; // move 2 steps
  			board.enemy_arr[i].moved = 0;
  			board.enemy_arr[i].direction = 0; // down the board
@@ -1183,7 +1316,6 @@ function inBounds(x, y, z) {
 	if (Math.abs(z) > Math.floor(board.BOARD_SIZE/2) * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2)
 		return false;
 	if (isObstacleAt(display_coord_to_grid_coord(x), display_coord_to_grid_coord(z))) {
-		console.log("LALA");
 		return false;
 	}
 	return true;

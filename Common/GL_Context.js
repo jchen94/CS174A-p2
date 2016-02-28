@@ -6,7 +6,8 @@
 // *******************************************************
 // IMPORTANT -- In the line below, add the filenames of any new images you want to include for textures!
 
-var texture_filenames_to_load = [ "stars.png", "text.png", "earth.gif", "camo.png", "dirt.jpg", "sky.jpg", "grass.jpg", "tree.jpg" ];
+var texture_filenames_to_load = [ "stars.png", "text.png", "earth.gif", "camo.png", "dirt.jpg", "sky.jpg", 
+									"grass.jpg", "tree.jpg", "metal.jpg" ];
 
 // *******************************************************
 // IMPORTANT -- Any new shader variables you define need to have a line added to class Graphics_Addresses below, so their addresses can be retrieved.
@@ -86,7 +87,9 @@ function GL_Context( canvas_id )
 // *******************************************************
 // Debug_Screen - Displays the text of the user interface
 function Debug_Screen()	
-{	this.string_map = { };	this.m_text = new text_line( 20 ); 		this.start_index = 2;	this.tick = 0;
+{	this.string_map = { };	this.m_text = new text_line( 30 ); 		this.start_index = 2;	this.tick = 0;
+	this.end_game = ""
+	this.try_again =""
 	this.graphicsState = new GraphicsState( mat4(), mat4(), 0 );
 }
 
@@ -97,6 +100,21 @@ function Debug_Screen()
 			var model_transform = rotate( -90, vec3( 0, 1, 0 ) );
 			model_transform     = mult( model_transform, translate( .1, -.9, .9 ) );
 			model_transform     = mult( model_transform, scale( 1, .075, .05) );
+
+			if (this.end_game !== "") {
+				var mt = model_transform;
+				mt = mult(model_transform, translate(-1, 15, -10));
+				mt = mult(mt, scale(2, 2, 2));
+
+				this.m_text.set_string(this.end_game);
+				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
+
+				mt = mult(mt, translate(0, -1, 5));
+				this.m_text.set_string(this.try_again);
+				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
+
+			}
+		
 			
 			var strings = Object.keys( this.string_map );
 			
@@ -107,17 +125,17 @@ function Debug_Screen()
 				model_transform = mult( model_transform, translate( 0, 1, 0 ) );
 			} 
 			
-			model_transform     = mult( model_transform, translate( 0, 20, -32 ) );
-			this.m_text.set_string( "Controls:" );
-			this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI
+			// model_transform     = mult( model_transform, translate( 0, 20, -32 ) );
+			// // this.m_text.set_string( "Controls" );
+			// this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI
 			
-			var key_combinations = Object.keys( shortcut.all_shortcuts );
-			for( var i = 0; i < key_combinations.length; i++ )
-			{
-				model_transform = mult( model_transform, translate( 0, -1, 0 ) );				
-				this.m_text.set_string( key_combinations[i] );
-				this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any controls on the UI
-			}
+			// var key_combinations = Object.keys( shortcut.all_shortcuts );
+			// for( var i = 0; i < key_combinations.length; i++ )
+			// {
+			// 	model_transform = mult( model_transform, translate( 0, -1, 0 ) );				
+			// 	this.m_text.set_string( key_combinations[i] );
+			// 	this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any controls on the UI
+			// }
 	}
 
 	Debug_Screen.prototype.init_keys = function() 
