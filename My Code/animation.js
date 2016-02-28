@@ -18,14 +18,21 @@ var canvas, canvas_size, gl = null, g_addrs,
 			earth = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "earth.gif" ),
 			stars = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "stars.png" ),
 			camo = new Material ( vec4( 0.5, 0.5, 0.5, 1), 1, 0.2, 0.20, 30, "camo.png"),
-			dirt = new Material (vec4(0.5, 0.5, 0.5, 1), 1, 0.2, 0.2, 30, "dirt.jpg"),
-			sky = new Material (vec4(0.9, 0.9, 0.9, 1), 1, 0.2, 1, 30, "sky.jpg"),
+			dirt = new Material (vec4(0.8, 0.5, 0.5, 1), 1, 0.2, 0.2, 30, "dirt.jpg"),
+			sky = new Material (vec4(0.9, 0.9, 0.9, 1), 1, 0, 0, 30, "sky.jpg"),
 			dark_grass = new Material (vec4(0.7, 0.9, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg"),
-			light_grass = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg");
+			light_grass = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg"),
+			wood = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "tree.jpg");
 
 var my_delta_time = 0;
 var moved = 0;
 var speed = 1.5;
+
+// 0 for starting sequence
+// game state 1 for title screen
+// game state 2 for in game
+// game state 3 for end seq
+var game_state = 2;
 
 var top_view = false;
 
@@ -41,6 +48,7 @@ var high_point = 60;
 var walk_phase = 0;
 var stall = 0;
 var right_leg_forward = false;
+var walk_in_place_block = false;
 
 var block_upper_leg = false;
 
@@ -51,15 +59,17 @@ var arms_up = true;
 var direction = 0; 
 var orientation = 3; // {0, 1, 2, 3} = {up, right, down, left}
 
-var board = new Board(9); // set up 17x17 board
+var board = new Board(9); 
 var obstacle = new Obstacle(board);
-var player = new Player(0, board.BOARD_UNIT_SIZE/2, 0);
+var player = new Player(0, board.BOARD_UNIT_SIZE/2 + 0.5, 0);
 
 var bullet = new Bullet(0, board.BOARD_UNIT_SIZE/2 + 0.75, 0); // oh boy! This is just a test. Figure out something better later.
 var flower = new Flower();
 var board_x_bound, board_z_bound = board.BOARD_SIZE * board.BOARD_UNIT_SIZE;
+var death_delta = 0;
+var death_cam_dist = 2.5;
 
-var music = new Array();
+var music = {};
 
 
 function CURRENT_BASIS_IS_WORTH_SHOWING(self, model_transform) { self.m_axis.draw( self.basis_id++, self.graphicsState, model_transform, new Material( vec4( .8,.3,.8,1 ), 1, 1, 1, 40, "" ) ); }
@@ -96,12 +106,33 @@ function Animation()
 		var new_music = new Audio("002-kazumi-totaka-mii-plaza.mp3");
 		new_music.loop = true;
 		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
-		music.push(new_music);
+		music["wii"] = new_music;
 
 		new_music = new Audio("training-mode.mp3");
 		new_music.loop = true;
 		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
-		music.push(new_music);
+		music["training"] = new_music;
+
+		new_music = new Audio("shoot_boom.mp3");
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["boom"] = new_music;
+
+		new_music = new Audio("punch.mp3");
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["shoot"] = new_music
+
+		new_music = new Audio("dying.mp3");
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["dead"] = new_music
+
+		new_music = new Audio("place_mine.mp3");
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["mine"] = new_music
+
 
 		
 		// 1st parameter is camera matrix.  2nd parameter is the projection:  The matrix that determines how depth is treated.  It projects 3D points onto a plane.
@@ -136,15 +167,28 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
 	shortcut.add( "0", function() { music[0].play(); })
-	shortcut.add( "9", function() { music[1].play(); })
-	shortcut.add( "7", function() { pause_all_music(); })
-	shortcut.add( "3", function() { block_arm = !block_arm; 
-		if (!block_upper_leg) {
-			block_upper_leg = !block_upper_leg; 
-			walk_phase = 0}
+	shortcut.add( "9", function() { walk_in_place(); })
+	shortcut.add( "7", function() { 
+		if (player.mines > 0) {
+			player.mines--;
+			player.mines_arr[player.mines];
+			player.mines_arr[player.mines].pos_x = player.pos_x;
+			player.mines_arr[player.mines].pos_y = 1.5;
+			player.mines_arr[player.mines].pos_z = player.pos_z;
+			player.mines_arr[player.mines].spawned = true;
+			// set player's mine on board
+			board.board_arr[display_coord_to_grid_coord(player.mines_arr[player.mines].pos_x)][display_coord_to_grid_coord(player.mines_arr[player.mines].pos_z)] = 4;
+			music["mine"].currentTime = 0;
+			music["mine"].play();
+
+		}
+	 })
+	shortcut.add( "3", function() { spawn_enemy();
 		})
 	shortcut.add( "t", 		function() {
 		if (!player.bullet_fired) {
+			music["shoot"].currentTime = 0; 
+			music["shoot"].play();
 			player.bullet_fired = true;
 			bullet.pos_x = player.pos_x;
 			bullet.pos_z = player.pos_z;
@@ -171,19 +215,23 @@ Animation.prototype.init_keys = function()
 		if (top_view)
 			top_view_movement(1, player);
 		else {
-			if (animate){
-				if (!block_pivot) {
-					block_pivot = true;
-					turn_right = true;
-					stop_angle = direction + 90;
-					if (orientation == 3)
-						orientation = 0;
-					else
-						orientation++;
+			if (!block_upper_leg) {
+				if (animate) {
+					walk_phase = 0;
+					walk_in_place_block = true;
+					if (!block_pivot) {
+						block_pivot = true;
+						turn_right = true;
+						stop_angle = direction + 90;
+						if (orientation == 3)
+							orientation = 0;
+						else
+							orientation++;
+					}
 				}
+				else
+					direction += 5;
 			}
-			else
-				direction += 5;
 		}
 	});
 	shortcut.add( "down", function() { 
@@ -206,19 +254,23 @@ Animation.prototype.init_keys = function()
 		if (top_view) 
 			top_view_movement(3, player);
 		else {
-			if (animate){
-				if (!block_pivot) {
-					block_pivot = true;
-					turn_right = false;
-					stop_angle = direction - 90;
-					if (orientation == 0)
-							orientation = 3;
-						else
-							orientation--;
-					}
+			if (!block_upper_leg) {
+				if (animate){
+					walk_phase = 0;
+					walk_in_place_block = true;
+					if (!block_pivot) {
+						block_pivot = true;
+						turn_right = false;
+						stop_angle = direction - 90;
+						if (orientation == 0)
+								orientation = 3;
+							else
+								orientation--;
+						}
+				}
+				else
+					direction -= 5;
 			}
-			else
-				direction -= 5;
 		}
 	});
 
@@ -263,59 +315,74 @@ Animation.prototype.display = function(time)
 		if(animate) this.graphicsState.animation_time += this.animation_delta_time;
 		prev_time = time;
 		
-		// update_camera( this, this.animation_delta_time );
+		if (game_state === 0)
+			update_camera( this, this.animation_delta_time );
 			
 		this.basis_id = 0;
 		
 		var model_transform = mat4();
 
-		if (block_pivot)
-			pivot();
+		// in game: camera follows human
+		if (game_state === 2) {
+			if (block_pivot)
+				pivot();
 
-		var cam_x_dist = 1.5 * Math.cos(to_radians(direction));
-		var cam_z_dist = 1.5 * Math.sin(to_radians(direction));
+			var cam_x_dist = 2.5 * Math.cos(to_radians(direction));
+			var cam_z_dist = 2.5 * Math.sin(to_radians(direction));
 
-		var eye_x, eye_y, eye_z;
-		eye_x = player.pos_x - cam_x_dist;
-		eye_y = player.pos_y + 0.5;
-		eye_z = player.pos_z - cam_z_dist;
+			var eye_x, eye_y, eye_z;
+			eye_x = player.pos_x - cam_x_dist;
+			eye_y = player.pos_y + 0.5;
+			eye_z = player.pos_z - cam_z_dist;
 
-		var at = vec3(player.pos_x, player.pos_y, player.pos_z);
-		var eye = vec3(eye_x, eye_y, eye_z);
-		var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
+			var at = vec3(player.pos_x, player.pos_y, player.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
 
-		if (top_view) {
-			at = vec3(0, 0, 0);
-			eye = vec3(0, 70, 0);
+			if (top_view) {
+				at = vec3(0, 0, 0);
+				eye = vec3(0, 70, 0);
+			}
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
 		}
 
+		if (game_state === 3) {
+			death_cam_dist += 0.1;
+			if (death_cam_dist > 15)
+				death_cam_dist = 15;
+			var cam_x_dist = death_cam_dist * Math.cos(to_radians(direction));
+			var cam_z_dist = death_cam_dist * Math.sin(to_radians(direction));
 
+			var eye_x, eye_y, eye_z;
+			eye_x = player.pos_x - cam_x_dist;
+			eye_y = player.pos_y + 0.5;
+			eye_z = player.pos_z - cam_z_dist;
 
-		this.graphicsState.camera_transform = lookAt(eye, at, up);
-		// so this should rotate?
+			var at = vec3(player.pos_x, player.pos_y, player.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
 
-		
+			if (top_view) {
+				at = vec3(0, 0, 0);
+				eye = vec3(0, 70, 0);
+			}
 
-
-
-
-
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
 
 		/**********************************
 		Start coding here!!!!
 		**********************************/
-		// this.draw_large_board(model_transform, board, obstacle);
 		var stack = new Array();
 		stack.push(model_transform);
 
+	// if (game_state === 2) {
 		this.draw_sky(model_transform);
 
-		// model_transform = mult(model_transform, scale(30, 0.2, 30));
-		// this.m_cube.draw(this.graphicsState, model_transform, grass);
 
 		model_transform = stack.pop();
 		stack.push(model_transform);
-		// model_transform = mult(model_transform, translate(0, 4, 0));
 
 		model_transform = mult(model_transform, translate(-board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2
 												, 0, -board.BOARD_SIZE/2 * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2));
@@ -325,26 +392,148 @@ Animation.prototype.display = function(time)
 		model_transform = mult(model_transform, translate(player.pos_x, player.pos_y, player.pos_z));
 
 		model_transform = mult(model_transform, rotate(-direction + 90, 0, 1, 0));
-		this.draw_character(model_transform,greyPlastic);
+		this.draw_character(model_transform, greyPlastic);
 
-		// this.m_landmine.draw(this.graphicsState, model_transform, camo);
-		// this.draw_tree(model_transform, red);
-
-		// if (block_arm) {
-		// 	raise_arm(this.animation_delta_time);
-
-		// }
+		// draw mines
+		model_transform = stack.pop();
+		stack.push(model_transform);
+		for (var i = 0; i < player.mines_arr.length; i++) {
+			if (player.mines_arr[i].spawned) {
+				model_transform = mult(model_transform, translate(player.mines_arr[i].pos_x, player.mines_arr[i].pos_y, player.mines_arr[i].pos_z));
+				this.draw_landmine(model_transform);
+				model_transform = stack.pop();
+				stack.push(model_transform);
+			}
+		}
 
 		// sitting_pose();
 		if (block_upper_leg) {
 			// lift_left_leg(this.animation_delta_time/3);
 			half_walk(this.animation_delta_time);
 		}
-		// model_transform = mult(model_transform, scale(2, 2, 2));
 
+		if (walk_in_place_block) {
+			walk_in_place(this.animation_delta_time);
+		}
+
+		// draw enemies
+		model_transform = stack.pop();
+		stack.push(model_transform);
+		for (var i = 0; i < board.enemy_arr.length; i++) {
+			var enemy = board.enemy_arr[i];
+			var num = Math.round(3 * Math.random());
+			var effective_dir = enemy.direction;
+
+			if (effective_dir % 90 === 0 && effective_dir % 180 !== 0)
+				effective_dir -= 180;
+			if (enemy.spawned) {
+				if (enemy.steps <= 0) {
+					switch (num) {
+							case 1:
+								enemy.direction += 90; // eventually change this to random
+								break;
+							case 2:
+								enemy.direction += 180; // eventually change this to random
+								break;
+							case 3:
+								enemy.direction += 270; // eventually change this to random
+								break;
+						}
+					enemy.steps = 2;
+				}
+				else {
+					var x_to_go = board.enemy_arr[i].pos_x + 0.06 * 0.05 * 1.4 * 
+											this.animation_delta_time * 
+											Math.cos(to_radians(board.enemy_arr[i].direction));
+					var z_to_go = board.enemy_arr[i].pos_z + 0.06 * 0.05 * 1.4 * 
+											this.animation_delta_time * 
+											Math.sin(to_radians(board.enemy_arr[i].direction));
+					var grid_x = display_coord_to_grid_coord(x_to_go);
+					var grid_z = display_coord_to_grid_coord(z_to_go);
+					var can_move = (grid_x % 2 === 0 || grid_z % 2 === 0) && 
+									display_coord_to_grid_coord(x_to_go - board.BOARD_UNIT_SIZE/2) < board.BOARD_SIZE && 
+									display_coord_to_grid_coord(z_to_go - board.BOARD_UNIT_SIZE/2) < board.BOARD_SIZE;
+					// console.log(display_coord_to_grid_coord(enemy.pos_x) + ", " + display_coord_to_grid_coord(enemy.pos_z));
+					if (can_move && inBounds(board.BOARD_UNIT_SIZE/2 + board.enemy_arr[i].pos_x + 0.06 * 0.05 * 1.4 * 
+											this.animation_delta_time * 
+											Math.cos(to_radians(board.enemy_arr[i].direction)),
+						enemy.pos_y,
+						board.BOARD_UNIT_SIZE/2 + board.enemy_arr[i].pos_z + 0.06 * 0.05 * 1.4 * 
+											this.animation_delta_time * 
+											Math.sin(to_radians(board.enemy_arr[i].direction)))
+						)
+					{
+						board.enemy_arr[i].pos_x += 0.06 * 0.05 * 1.4 * 
+												this.animation_delta_time * 
+												Math.cos(to_radians(board.enemy_arr[i].direction));
+						board.enemy_arr[i].pos_z += 0.06 * 0.05 * 1.4 * 
+												this.animation_delta_time * 
+												Math.sin(to_radians(board.enemy_arr[i].direction));
+						if (!player.dead &&
+							grid_x === display_coord_to_grid_coord(player.pos_x) && grid_z === display_coord_to_grid_coord(player.pos_z)) {
+							player.dead = true;
+							music["dead"].currentTime = 0;
+							music["dead"].play(); 
+							console.log("YOU DIED!");
+							game_state = 3;
+						}
+					}
+					else
+					{
+						enemy.steps = 0;
+					}
+				}
+				// console.log(display_coord_to_grid_coord(enemy.pos_x) + ", " + display_coord_to_grid_coord(enemy.pos_z));
+				model_transform = mult(model_transform, 
+						translate(board.enemy_arr[i].pos_x, board.enemy_arr[i].pos_y, board.enemy_arr[i].pos_z));
+				model_transform = mult(model_transform, rotate(effective_dir, 0, 1, 0));
+				this.draw_player(model_transform);
+				model_transform = stack.pop();
+				stack.push(model_transform);
+			}
+		}
+
+		// check collision with mines
+		if (player.mines < 3) {
+			for (var i = 0; i < board.enemy_arr.length; i++) {
+				for (var j =0; j<player.mines_arr.length; j++) {
+					if (board.enemy_arr[i].spawned &&
+						player.mines_arr[j].spawned && 
+						display_coord_to_grid_coord(board.enemy_arr[i].pos_x) === display_coord_to_grid_coord(player.mines_arr[j].pos_x) &&
+						display_coord_to_grid_coord(board.enemy_arr[i].pos_z) === display_coord_to_grid_coord(player.mines_arr[j].pos_z)) {
+						console.log("ENEMY DESTROYED");
+						player.mines_arr[j].spawned = false;
+						board.enemy_arr[i].spawned = false;
+						player.score += 10;
+						music["boom"].currentTime = 0;
+						music["boom"].play(); 
+						// explode!
+						break;
+					}
+				}
+			}
+		}
+
+		// draw bullet
 		model_transform = stack.pop();
 		stack.push(model_transform);
 		if (player.bullet_fired) {
+			// console.log("bullet_x" + bullet.pos_x, "bullet_z" + bullet.pos_z);
+			// console.log("bulgrid_x" + display_coord_to_grid_coord(bullet.pos_x), "bulgrid_z" + display_coord_to_grid_coord(bullet.pos_z));
+			for (var i = 0; i < board.enemy_arr.length; i++) {
+				if (board.enemy_arr[i].spawned && 
+					display_coord_to_grid_coord(board.enemy_arr[i].pos_x) === display_coord_to_grid_coord(bullet.pos_x) &&
+					display_coord_to_grid_coord(board.enemy_arr[i].pos_z) === display_coord_to_grid_coord(bullet.pos_z)) {
+					console.log("ENEMY DESTROYED");
+					player.bullet_fired = false;
+					board.enemy_arr[i].spawned = false;
+					player.score += 10;
+					music["boom"].currentTime = 0;
+					music["boom"].play(); 
+					// explode!
+					break;
+				}
+			}
 			model_transform = mult(model_transform, translate(bullet.pos_x, bullet.pos_y, bullet.pos_z));
 			this.draw_bullet(model_transform);
 			bullet.pos_z += 0.06 * 0.5 * this.animation_delta_time * Math.sin(to_radians(direction));
@@ -360,42 +549,56 @@ Animation.prototype.display = function(time)
 			bullet.pos_x = player.pos_x;
 			bullet.pos_y = player.pos_y;
 			bullet.pos_z = player.pos_z;
-			model_transform = mult(model_transform, translate(bullet.pos_x, bullet.pos_y, bullet.pos_z));
-			this.draw_bullet(model_transform);
+			// model_transform = mult(model_transform, translate(bullet.pos_x, bullet.pos_y, bullet.pos_z));
+			// this.draw_bullet(model_transform);
 		}
-		// 	if (Math.abs(bullet.pos_x) >= 40 || Math.abs(bullet.pos_z) >= 40) {
-		// 		player.bullet_fired = false;
-		// 		bullet.pos_x = player.pos_x;
-		// 		bullet.pos_z = player.pos_z;
-		// 	}
-		// 	if (player.bullet_fired) {
-		// 		top_view_movement(bullet.orientation, bullet);
-		// 	}
-		// 	model_transform = stack.pop();
-		// 	stack.push(model_transform);
-		// // }
+
+	// } // END GAME PLAY 2
+
+	if (game_state === 3) {
+		death_delta += this.animation_delta_time;
+		if (death_delta > 1000 && death_delta < 5000) {
+			player.pos_y += 0.06 * 0.05 * this.animation_delta_time
+		}
+	}
+
+
+		
 
 	}	
 
 Animation.prototype.update_strings = function( debug_screen_object )		// Strings this particular class contributes to the UI
 {
 	var time = 1;
-	debug_screen_object.string_map["moved"] = "Moved: " + moved;
 	debug_screen_object.string_map["ani_delta"] = "Time Delta: " + this.animation_delta_time;
 	debug_screen_object.string_map["frame"] = "FPS: " + Math.round(1/(this.animation_delta_time/1000), 1) + " fps";
 	debug_screen_object.string_map["time"] = "Animation Time: " + this.graphicsState.animation_time/1000 + "s";
 	debug_screen_object.string_map["basis"] = "Showing basis: " + this.m_axis.basis_selection;
+	debug_screen_object.string_map["score"] = "Score: " + player.score;
 	debug_screen_object.string_map["animate"] = "Animation " + (animate ? "on" : "off") ;
+	debug_screen_object.string_map["mines"] = "Mines available: " + player.mines;
 	debug_screen_object.string_map["thrust"] = "Thrust: " + thrust;
 	debug_screen_object.string_map["direction]"] = "Direction: " + direction;
 }
 
 Animation.prototype.draw_sky = function (model_transform) {
+	// model_transform = mult(model_transform, rotate(90, 0, 0, 1));
 	model_transform = mult(model_transform, scale(100, 100, 100));
-	this.m_sphere.draw(this.graphicsState, model_transform, sky);
+	this.draw_angled_cylinder(model_transform, sky);
+	// this.m_sphere.draw(this.graphicsState, model_transform, sky);
+}
+
+Animation.prototype.draw_death = function (model_transform) {
+
+}
+
+Animation.prototype.draw_landmine = function(model_transform) {
+	model_transform = mult(model_transform, scale(0.25, 0.25, 0.25));
+	this.m_landmine.draw(this.graphicsState, model_transform, camo);
 }
 
 Animation.prototype.draw_character = function (model_transform, color) {
+
 		var stack = new Array();
 		model_transform = mult(model_transform, scale(0.25, 0.25, 0.25));
 		stack.push(model_transform);
@@ -440,14 +643,14 @@ Animation.prototype.draw_character = function (model_transform, color) {
 		this.draw_bazooka(model_transform, camo);
 
 
-		model_transform = mult(model_transform, rotate(player.upper_arm_angle_x, 1, 0, 0));
-		model_transform = mult(model_transform, rotate(-player.upper_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_x, 1, 0, 0));
+		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_z, 0, 0, 1));
 		this.draw_arm_right(model_transform);
 
-		model_transform = mult(model_transform, rotate(player.upper_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_z, 0, 0, 1));
 		model_transform = mult(model_transform, translate(0.8, 0, 0));
-		model_transform = mult(model_transform, rotate(-2 * player.upper_arm_angle_x, 1, 0, 0));
-		model_transform = mult(model_transform, rotate(player.upper_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_x - player.upper_left_arm_angle_x, 1, 0, 0));
+		model_transform = mult(model_transform, rotate(player.upper_left_arm_angle_z, 0, 0, 1));
 		this.draw_arm_left(model_transform);
 
 }
@@ -556,8 +759,8 @@ Animation.prototype.draw_arm_left = function(model_transform) {
 	this.draw_upper_arm(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
 	this.draw_shoulder(model_transform, player.shoulder_color);
-	model_transform = mult(model_transform, rotate(-player.lower_arm_angle_x, 1, 0, 0));
-	model_transform = mult(model_transform, rotate(-player.lower_arm_angle_z, 0, 0, 1));
+	model_transform = mult(model_transform, rotate(player.lower_left_arm_angle_x, 1, 0, 0));
+	model_transform = mult(model_transform, rotate(player.lower_left_arm_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
 	this.draw_lower_arm(model_transform, player.lower_arm_color);
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
@@ -581,8 +784,8 @@ Animation.prototype.draw_arm_right = function(model_transform) {
 	this.draw_upper_arm(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
 	this.draw_shoulder(model_transform, player.shoulder_color);
-	model_transform = mult(model_transform, rotate(-player.lower_arm_angle_x, 1, 0, 0));
-	model_transform = mult(model_transform, rotate(player.lower_arm_angle_z, 0, 0, 1));
+	model_transform = mult(model_transform, rotate(player.lower_right_arm_angle_x, 1, 0, 0));
+	model_transform = mult(model_transform, rotate(player.lower_right_arm_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
 	this.draw_lower_arm(model_transform, player.lower_arm_color);
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
@@ -677,7 +880,7 @@ Animation.prototype.draw_board = function (model_transform) {
 			this.draw_board_col(model_transform, 0);
 		else {
 			this.draw_board_col(model_transform, 1);
-			var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/2, 0));
+			var up_mt = mult(model_transform, translate(0, board.BOARD_UNIT_SIZE/3, 0));
 			this.draw_obstacles_col(up_mt);
 		}
 		model_transform = mult(model_transform, translate(board.BOARD_UNIT_SIZE, 0, 0));
@@ -686,8 +889,9 @@ Animation.prototype.draw_board = function (model_transform) {
 }
 
 Animation.prototype.draw_obstacle = function (model_transform) {
-	model_transform = mult(model_transform, scale(obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE*2, obstacle.OBSTACLE_SIZE));
-	this.m_cube.draw(this.graphicsState, model_transform, obstacle.OBSTACLE_COLOR);
+	model_transform = mult(model_transform, scale(obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE, obstacle.OBSTACLE_SIZE));
+	// this.m_cube.draw(this.graphicsState, model_transform, obstacle.OBSTACLE_COLOR);
+	this.draw_tree(model_transform);
 
 }
 
@@ -717,13 +921,17 @@ Animation.prototype.draw_bullet = function (model_transform) {
 
 Animation.prototype.draw_player = function(model_transform) {
 	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
-	this.m_sphere.draw(this.graphicsState, model_transform, new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "earth.gif" ));
+	this.m_sphere.draw(this.graphicsState, model_transform, sky);
+	model_transform = mult(model_transform, translate(0, 0, 0.5));
+	this.m_sphere.draw(this.graphicsState, model_transform, camo);
+	model_transform = mult(model_transform, translate(0.5, 0, -0.5));
+	this.m_sphere.draw(this.graphicsState, model_transform, purplePlastic);
 	return model_transform;
 }
 
 Animation.prototype.draw_tree_segment = function (model_transform, color) {
 	model_transform = mult(model_transform, scale(1, 0.5, 1));
-	this.draw_cone(model_transform, red);
+	this.draw_cone(model_transform, color);
 }
 
 Animation.prototype.draw_tree_trunk = function (model_transform, color) {
@@ -731,17 +939,18 @@ Animation.prototype.draw_tree_trunk = function (model_transform, color) {
 	this.draw_cylinder(model_transform, color);
 }
 
-Animation.prototype.draw_tree = function (model_transform, color) {
-	this.draw_tree_trunk(model_transform, earth);
+Animation.prototype.draw_tree = function (model_transform) {
+	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+	this.draw_tree_trunk(model_transform, wood);
 	model_transform = mult(model_transform, translate(0, 0.5, 0));
 	model_transform = mult(model_transform, scale(0.8, 0.8, 0.8));
-	this.draw_tree_segment(model_transform, color);
+	this.draw_tree_segment(model_transform, dark_grass);
 	model_transform = mult(model_transform, translate(0, 0.5, 0));
 	model_transform = mult(model_transform, scale(0.8, 0.8, 0.8));
-	this.draw_tree_segment(model_transform, color);
+	this.draw_tree_segment(model_transform, dark_grass);
 	model_transform = mult(model_transform, translate(0, 0.5, 0));
 	model_transform = mult(model_transform, scale(0.8, 0.8, 0.8));
-	this.draw_tree_segment(model_transform, color);
+	this.draw_tree_segment(model_transform, dark_grass);
 }
 
 function Control() {
@@ -761,7 +970,7 @@ function Board(board_size) {
 	// size of each square on the board: default is 2x2
 	this.BOARD_UNIT_SIZE = 5;
 	// dark green
-	this.BOARD_UNIT_COLOR_1 = dark_grass; //new Material(vec4(0, 0.392157, 0, 1), 1, 1, 1, 20); 
+	this.BOARD_UNIT_COLOR_1 = dirt; //new Material(vec4(0, 0.392157, 0, 1), 1, 1, 1, 20); 
 	// forest green
 	this.BOARD_UNIT_COLOR_2 = light_grass; //new Material(vec4(0.133333, 0.545098, 0.133333, 1), 1, 1, 1, 20); 
 
@@ -778,17 +987,11 @@ function Board(board_size) {
 		}
 	}
 
-	this.enemy_arr = new Array(this.BOARD_SIZE);
-	for (var i = 0 ; i < this.BOARD_SIZE; i++) {
-		this.board_arr[i] = new Array(this.BOARD_SIZE);
-	}
-	for (var i = 0; i < this.BOARD_SIZE; i++) {
-		for (var j = 0; j < this.BOARD_SIZE; j++) {
-			if (i % 2 == 1 && j % 2 == 1)
-				this.board_arr[i][j] = 1; // set as obstacle
-			else
-				this.board_arr[i][j] = 0; // set as free space
-		}
+	this.MAX_ENEMIES = 5;
+
+	this.enemy_arr = new Array();
+	for (var i = 0; i < this.MAX_ENEMIES; i++) {
+		this.enemy_arr.push(new Enemy(0, 0, 0, false));
 	}
 
 	// set the player?
@@ -827,14 +1030,21 @@ function Player(x, y, z) {
 	this.hand_color = skin;
 	this.skin_color = skin;
 
+	this.dead = false;
+
 	this.bullet_fired = false;
+	this.score = 0;
 
 
-	this.upper_arm_angle_z = 30;
-	this.lower_arm_angle_z = 10;
+	this.upper_left_arm_angle_z = 30;
+	this.lower_left_arm_angle_z = 10;
+	this.upper_left_arm_angle_x = 0;
+	this.lower_left_arm_angle_x = -90;
 
-	this.upper_arm_angle_x = 0;
-	this.lower_arm_angle_x = 10;
+	this.upper_right_arm_angle_z = 30;
+	this.lower_right_arm_angle_z = 10;
+	this.upper_right_arm_angle_x = -30;
+	this.lower_right_arm_angle_x = -110;
 
 	this.upper_left_leg_angle_z = 0;
 	this.lower_left_leg_angle_z = 0;
@@ -847,12 +1057,34 @@ function Player(x, y, z) {
 	this.lower_right_leg_angle_x = 0;
 
 	this.eye_y = 0.1;
+	this.mines = 3;
+	this.mines_arr = new Array();
+	for (var i = 0; i < this.mines; i++) {
+		this.mines_arr.push(new Mine());
+	}
+
+
+}
+
+function Mine() {
+	this.pos_x = 0;
+	this.pos_y = 0;
+	this.pos_z = 0;
+
+	this.spawned = false;
 }
 
 
-
 //
-function Bomber() {
+function Enemy() {
+	this.pos_x = 0;
+	this.pos_y = 0;
+	this.pos_z = 0;
+	this.direction = 0;
+	this.steps = 0;
+	this.moved = 0;
+
+	this.spawned = false;
 	
 }
 
@@ -869,10 +1101,10 @@ function Bullet(x, y, z) {
 }
 
 function display_coord_to_grid_coord(i) {
-	return -(i/board.BOARD_UNIT_SIZE) + Math.floor(board.BOARD_SIZE/2);
+	return Math.round(-(i/board.BOARD_UNIT_SIZE) + Math.floor(board.BOARD_SIZE/2));
 }
 
-function grid_coord_to_display_coor(i) {
+function grid_coord_to_display_coord(i) {
 	return board.BOARD_UNIT_SIZE * (Math.floor(board.BOARD_SIZE/2) - i);
 }
 
@@ -919,20 +1151,51 @@ function top_view_movement(o, obj_to_move) {
 	}
 }
 
+function gen_steps() {
+	return 8 * board.BOARD_UNIT_SIZE * Math.floor(board.BOARD_SIZE/2 * Math.random());
+}
+
+// spawns an enemy
+// adds it to Board.enemy_arr
+// for now, just have enemies appear and stand still
+function spawn_enemy() {
+ 	// have enemies spawn in a random corner? let's just have it at top left for now.
+ 	for (var i = 0; i < board.enemy_arr.length; i++) {
+ 		if (!board.enemy_arr[i].spawned)
+ 		{
+ 			board.enemy_arr[i].spawned = true;
+ 			board.enemy_arr[i].pos_x = grid_coord_to_display_coord(2);
+ 			board.enemy_arr[i].pos_y = board.BOARD_UNIT_SIZE/2;
+ 			board.enemy_arr[i].pos_z = grid_coord_to_display_coord(4);
+ 			board.enemy_arr[i].steps = 2; // move 2 steps
+ 			board.enemy_arr[i].moved = 0;
+ 			board.enemy_arr[i].direction = 0; // down the board
+ 			break;
+ 		}
+ 	}
+
+}
+
 
 function inBounds(x, y, z) {
-	console.log(display_coord_to_grid_coord(x) + ", " + display_coord_to_grid_coord(z));
-	if (Math.abs(x) > Math.floor(board.BOARD_SIZE/2) * board.BOARD_UNIT_SIZE)
+	if (Math.abs(x) > Math.floor(board.BOARD_SIZE/2) * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2)
 		return false;
-	if (Math.abs(z) > Math.floor(board.BOARD_SIZE/2) * board.BOARD_UNIT_SIZE)
+	if (Math.abs(z) > Math.floor(board.BOARD_SIZE/2) * board.BOARD_UNIT_SIZE + board.BOARD_UNIT_SIZE/2)
 		return false;
-	if (isObstacleAt(display_coord_to_grid_coord(x), display_coord_to_grid_coord(z)))
+	if (isObstacleAt(display_coord_to_grid_coord(x), display_coord_to_grid_coord(z))) {
+		console.log("LALA");
 		return false;
+	}
 	return true;
 }
 
 function isObstacleAt(x, z) {
-	return x % 2 === 1 && z % 2 === 1;
+	// if (x > board.BOARD_SIZE - 1 || z > board.BOARD_SIZE - 1) {
+	// 	console.log ("WTF");
+	// 	return true;
+	// }
+	// else
+		return x % 2 === 1 && z % 2 === 1;
 }
 
 function pivot() {
@@ -981,177 +1244,6 @@ function pause_all_music() {
 	}
 }
 
-// lift left leg
-// slightly tilt right leg forward
-function lift_left_leg(delta) {
-	// increase until 20 degrees?
-	// contact
-
-	if (walk_phase === 0) {
-		player.upper_left_leg_angle_x += delta/3;
-		player.lower_left_leg_angle_x -= delta/10;
-		if (player.lower_left_leg_angle_x < -lower_leg_stop_angle) {
-			player.lower_left_leg_angle_x = -lower_leg_stop_angle;
-		}
-		player.upper_right_leg_angle_x -= delta/3;
-		player.lower_right_leg_angle_x -= delta/10;
-
-		if (player.upper_left_leg_angle_x > upper_leg_stop_angle) {
-			player.upper_left_leg_angle_x = upper_leg_stop_angle;
-			player.upper_right_left_angle_x = -upper_leg_stop_angle;
-			walk_phase = 1;
-		}
-	}
-	// recoil
-	else if (walk_phase === 1) {
-		player.lower_left_leg_angle_x -= delta/10;
-		player.lower_right_leg_angle_x -= delta/10;
-		if (player.lower_left_leg_angle_x < -lower_leg_stop_angle) {
-			player.lower_left_leg_angle_x = -lower_leg_stop_angle;
-			walk_phase = 2
-		}
-	}
-	// passing
-	else if (walk_phase === 2) {
-		// striagten left leg
-		player.upper_left_leg_angle_x -= delta/5;
-		player.lower_left_leg_angle_x += delta/18;
-
-		// keep right leg bent and swing forward
-		player.upper_right_leg_angle_x += delta/3;
-		player.lower_right_leg_angle_x -= delta/14;
-		if (player.upper_right_leg_angle_x > upper_leg_stop_angle) {
-			player.upper_right_leg_angle_x = upper_leg_stop_angle;
-			walk_phase = 3;
-		}
-	}
-	// high point
-	else if (walk_phase === 3) {
-		player.upper_left_leg_angle_x -= delta/14;
-		player.lower_left_leg_angle_x += delta/18;
-		// player.pos_x += delta/100;
-
-		player.upper_right_leg_angle_x += delta/3;
-		player.lower_right_leg_angle_x -= delta/14;
-		if (player.upper_right_leg_angle_x > high_point) {
-			player.upper_right_leg_angle_x = high_point;
-			walk_phase = 4;
-		}
-	}
-	// contact
-	else if (walk_phase === 4) {
-		// move left leg back and bend a bit
-		player.upper_left_leg_angle_x -= delta/14;
-		player.lower_left_leg_angle_x -= delta/18;
-
-		player.upper_right_leg_angle_x -= delta/3;
-		player.lower_right_leg_angle_x += delta/2;
-		if (player.upper_right_leg_angle_x < upper_leg_stop_angle) {
-			player.upper_right_leg_angle_x = upper_leg_stop_angle;
-			player.lower_right_leg_angle_x = 0;
-			walk_phase = 5;
-		}
-	}
-
-
-		if (walk_phase === 5) {
-		player.upper_right_leg_angle_x += delta/3;
-		player.lower_right_leg_angle_x -= delta/10;
-		if (player.right_left_leg_angle_x < -lower_leg_stop_angle) {
-			player.right_left_leg_angle_x = -lower_leg_stop_angle;
-		}
-		player.upper_left_leg_angle_x -= delta/3;
-		player.lower_left_leg_angle_x -= delta/10;
-
-		if (player.upper_right_leg_angle_x > upper_leg_stop_angle) {
-			player.upper_right_leg_angle_x = upper_leg_stop_angle;
-			walk_phase = 6;
-		}
-	}
-	// recoil
-	else if (walk_phase === 6) {
-		player.lower_right_leg_angle_x -= delta/10;
-		player.lower_left_leg_angle_x -= delta/10;
-		if (player.lower_right_leg_angle_x < -lower_leg_stop_angle) {
-			player.lower_right_leg_angle_x = -lower_leg_stop_angle;
-			walk_phase = 7;
-		}
-	}
-	// passing
-	else if (walk_phase === 7) {
-		// striagten left leg
-		player.upper_right_leg_angle_x -= delta/5;
-		player.lower_right_leg_angle_x += delta/18;
-
-		// keep right leg bent and swing forward
-		player.upper_left_leg_angle_x += delta/3;
-		player.lower_left_leg_angle_x -= delta/14;
-		if (player.upper_left_leg_angle_x > upper_leg_stop_angle) {
-			player.upper_left_leg_angle_x = upper_leg_stop_angle;
-			walk_phase = 8;
-		}
-	}
-	// high point
-	else if (walk_phase === 8) {
-		player.upper_right_leg_angle_x -= delta/14;
-		player.lower_right_leg_angle_x += delta/18;
-		// player.pos_x += delta/100;
-
-		player.upper_left_leg_angle_x += delta/3;
-		player.lower_left_leg_angle_x -= delta/14;
-		if (player.upper_left_leg_angle_x > high_point) {
-			player.upper_left_leg_angle_x = high_point;
-			walk_phase = 9;
-		}
-	}
-
-	else if (walk_phase === 9) {
-		// straighten and lower left leg
-		player.upper_left_leg_angle_x -= delta/3;
-		player.lower_left_leg_angle_x += delta/3;
-		if (player.upper_left_leg_angle_x < upper_leg_stop_angle)
-		{
-			player.upper_left_leg_angle_x = upper_leg_stop_angle;
-		}
-
-		if (player.lower_left_leg_angle_x > 0)
-			player.lower_left_leg_angle_x = 0;
-
-		// straighten right leg and move it back
-		player.upper_right_leg_angle_x -= delta/14;
-		player.lower_right_leg_angle_x -= delta/18;
-
-		if (player.upper_right_leg_angle_x < -upper_leg_stop_angle) {
-			player.upper_right_leg_angle_x = -upper_leg_stop_angle;
-			player.lower_right_leg_angle_x = 0;
-			player.lower_left_leg_angle_x = 0;
-			walk_phase = 10;
-		}
-
-		// move right leg back
-	}
-
-	// return to original stance
-	else if (walk_phase === 10) {
-		player.upper_left_leg_angle_x -= delta/3;
-		player.upper_right_leg_angle_x += delta/3;
-
-		if(player.upper_left_leg_angle_x < 0) {
-			player.upper_left_leg_angle_x = 0;
-			player.upper_right_leg_angle_x = 0;
-			stall++;
-			player.lower_left_leg_angle_x += delta/9;
-			player.lower_right_leg_angle_x -= delta/9;
-			if (stall >= 7) {
-				walk_phase = 0;
-				stall = 0;
-				// block_upper_leg = false;
-			}
-		}
-	}
-
-}
-
 function half_walk(delta) {
 	var back = 1;
 	if (backward)
@@ -1161,6 +1253,7 @@ function half_walk(delta) {
 		player.pos_x += 0.06 * 0.1 * 1.4 * delta * Math.cos(to_radians(direction)) * back;
 		moved += 0.06 * 0.1 * 1.4 * delta;
 		if (!right_leg_forward) {
+			player.upper_left_arm_angle_x -= (0.06 * 2 * speed *delta);
 			player.upper_left_leg_angle_x += (0.06 * 2 * speed *delta);
 			player.lower_left_leg_angle_x -= (0.06 * 1.5 * speed *delta);
 
@@ -1174,6 +1267,7 @@ function half_walk(delta) {
 			}
 		}
 		else {
+			player.upper_left_arm_angle_x -= (0.06 * 2 * speed *delta);
 			player.upper_right_leg_angle_x += (0.06 * 2 * speed * delta);
 			player.lower_right_leg_angle_x -= (0.06 * 1.5 * speed * delta);
 
@@ -1192,6 +1286,7 @@ function half_walk(delta) {
 		player.pos_x += 0.06 * 0.05 * 1.4 * delta * Math.cos(to_radians(direction)) * back;
 		moved += 0.06 * 0.05 * 1.5 * delta;
 		if (!right_leg_forward) {
+			player.upper_left_arm_angle_x += (0.06 * 3 * speed *delta);
 			player.upper_left_leg_angle_x -= (0.06 * 3 * speed * delta);
 			player.lower_left_leg_angle_x += (0.06 * 1.5 * speed * delta);
 
@@ -1203,6 +1298,7 @@ function half_walk(delta) {
 				player.upper_right_left_angle_x = 0;
 				player.lower_right_leg_angle_x = 0;
 				player.lower_left_leg_angle_x = 0;
+				player.upper_left_arm_angle_x = 10;
 				block_upper_leg = false;
 				right_leg_forward = !right_leg_forward;
 				if (moved != 5) {
@@ -1216,6 +1312,7 @@ function half_walk(delta) {
 			}
 		}
 		else {
+			player.upper_left_arm_angle_x += (0.06 * 3 * speed *delta);
 			player.upper_right_leg_angle_x -= (0.06 * 3 * speed * delta);
 			player.lower_right_leg_angle_x += (0.06 * 1.5 * speed * delta);
 
@@ -1227,6 +1324,7 @@ function half_walk(delta) {
 				player.upper_left_left_angle_x = 0;
 				player.lower_left_leg_angle_x = 0;
 				player.lower_right_leg_angle_x = 0;
+				player.upper_left_arm_angle_x = 10;
 				block_upper_leg = false;
 				right_leg_forward = !right_leg_forward;
 				if (moved != 5) {
@@ -1237,6 +1335,76 @@ function half_walk(delta) {
 					player.pos_z = Math.round(player.pos_z);
 					console.log("px:" + player.pos_x + "," + "pz: " + player.pos_z);
 				}
+			}
+		}
+	}
+}
+function walk_in_place(delta) {
+	if (walk_phase === 0) {
+		if (!right_leg_forward) {
+			player.upper_left_arm_angle_x -= (0.06 * 2 * speed *delta);
+			player.upper_left_leg_angle_x += (0.06 * 2 * speed *delta);
+			player.lower_left_leg_angle_x -= (0.06 * 1.5 * speed *delta);
+
+			player.upper_right_leg_angle_x -= (0.06 * speed * delta);
+			player.lower_right_leg_angle_x -= (0.06 * 2 * speed * delta);
+
+			if (player.upper_left_leg_angle_x > upper_leg_stop_angle) {
+				player.upper_left_leg_angle_x = upper_leg_stop_angle;
+				player.upper_right_left_angle_x = -upper_leg_stop_angle;
+				walk_phase = 1;
+			}
+		}
+		else {
+			player.upper_left_arm_angle_x -= (0.06 * 2 * speed *delta);
+			player.upper_right_leg_angle_x += (0.06 * 2 * speed * delta);
+			player.lower_right_leg_angle_x -= (0.06 * 1.5 * speed * delta);
+
+			player.upper_left_leg_angle_x -= (0.06 * speed * delta);
+			player.lower_left_leg_angle_x -= (0.06 * 2 * speed * delta);
+
+			if (player.upper_right_leg_angle_x > upper_leg_stop_angle) {
+				player.upper_right_leg_angle_x = upper_leg_stop_angle;
+				player.upper_left_left_angle_x = -upper_leg_stop_angle;
+				walk_phase = 1;
+			}
+		}
+	}
+	if (walk_phase === 1) {
+		if (!right_leg_forward) {
+			player.upper_left_arm_angle_x += (0.06 * 3 * speed *delta);
+			player.upper_left_leg_angle_x -= (0.06 * 3 * speed * delta);
+			player.lower_left_leg_angle_x += (0.06 * 1.5 * speed * delta);
+
+			player.upper_right_leg_angle_x += (0.06 * 1.5 * speed *delta);
+			player.lower_right_leg_angle_x += (0.06 * 3 * speed * delta);
+
+			if (player.upper_left_leg_angle_x <= 0) {
+				player.upper_left_leg_angle_x = 0;
+				player.upper_right_left_angle_x = 0;
+				player.lower_right_leg_angle_x = 0;
+				player.lower_left_leg_angle_x = 0;
+				player.upper_left_arm_angle_x = 10;
+				walk_in_place_block = false;
+				right_leg_forward = !right_leg_forward;
+			}
+		}
+		else {
+			player.upper_left_arm_angle_x += (0.06 * 3 * speed *delta);
+			player.upper_right_leg_angle_x -= (0.06 * 3 * speed * delta);
+			player.lower_right_leg_angle_x += (0.06 * 1.5 * speed * delta);
+
+			player.upper_left_leg_angle_x += (0.06 * 1.5 * speed * delta);
+			player.lower_left_leg_angle_x += (0.06 * 3 * speed * delta);
+
+			if (player.upper_right_leg_angle_x <= 0) {
+				player.upper_right_leg_angle_x = 0;
+				player.upper_left_left_angle_x = 0;
+				player.lower_left_leg_angle_x = 0;
+				player.lower_right_leg_angle_x = 0;
+				player.upper_left_arm_angle_x = 10;
+				walk_in_place_block = false;
+				right_leg_forward = !right_leg_forward;
 			}
 		}
 	}
@@ -1321,4 +1489,5 @@ function Flower() {
 	this.STEM_SEG_Y = 1;
 	this.STEM_SEG_Z = 0.5;
 }
+
 
