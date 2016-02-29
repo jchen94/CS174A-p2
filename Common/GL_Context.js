@@ -7,7 +7,7 @@
 // IMPORTANT -- In the line below, add the filenames of any new images you want to include for textures!
 
 var texture_filenames_to_load = [ "stars.png", "text.png", "earth.gif", "camo.png", "dirt.jpg", "sky.jpg", 
-									"grass.jpg", "tree.jpg", "metal.jpg" ];
+									"grass.jpg", "tree.jpg", "metal.jpg", "star_background.jpg" ];
 
 // *******************************************************
 // IMPORTANT -- Any new shader variables you define need to have a line added to class Graphics_Addresses below, so their addresses can be retrieved.

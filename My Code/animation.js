@@ -16,7 +16,7 @@ var canvas, canvas_size, gl = null, g_addrs,
 			yellow = new Material(vec4(1, 1, 0, 0.5), 1, 1, 1, 20),
 			skin = new Material(vec4(1, 0.921569, 0.803922,1), 1, 1, 1, 20),
 			red = new Material( vec4 (1, 0, 0, 1), 1, 1, 1, 20),
-			earth = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "earth.gif" ),
+			earth = new Material( vec4( .5,.5,.5,1 ), 1, 0.5, 0, 40, "earth.gif" ),
 			stars = new Material( vec4( .5,.5,.5,1 ), 1, 1, 1, 40, "stars.png" ),
 			camo = new Material ( vec4( 0.5, 0.5, 0.5, 1), 1, 0.2, 0.20, 30, "camo.png"),
 			dirt = new Material (vec4(0.8, 0.5, 0.5, 1), 1, 0.2, 0.2, 30, "dirt.jpg"),
@@ -24,9 +24,9 @@ var canvas, canvas_size, gl = null, g_addrs,
 			dark_grass = new Material (vec4(0.7, 0.9, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg"),
 			light_grass = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "grass.jpg"),
 			wood = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "tree.jpg"),
-			metal = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "metal.jpg");
+			metal = new Material (vec4(0.7, 0.7, 0.7, 1), 1, 0.2, 0.2, 30, "metal.jpg"),
+			star_background = new Material(vec4(0.5, 0.5, 0.5,1), 1, 0, 0, 30, "star_background.jpg");
 
-var my_delta_time = 0;
 var moved = 0;
 var speed = 1.5;
 
@@ -34,7 +34,7 @@ var speed = 1.5;
 // game state 1 for title screen
 // game state 2 for in game
 // game state 3 for end seq
-var game_state = 2;
+var game_state = 0;
 
 var top_view = false;
 
@@ -64,6 +64,8 @@ var orientation = 3; // {0, 1, 2, 3} = {up, right, down, left}
 var board = new Board(9); 
 var obstacle = new Obstacle(board);
 var player = new Player(0, board.BOARD_UNIT_SIZE/2 + 0.5, 0);
+var player2 = new Player(0, board.BOARD_UNIT_SIZE/2, 0);
+var abducted_player = new Player(0, 0, 0);
 
 var bullet = new Bullet(0, board.BOARD_UNIT_SIZE/2 + 0.75, 0); // oh boy! This is just a test. Figure out something better later.
 var flower = new Flower();
@@ -73,6 +75,10 @@ var death_cam_dist = 2.5;
 var death_angle = 0;
 var velocity = 1;
 var game_delta = 0;
+var opening_delta = 0;
+var opening_bullet = new Bullet(0, 0, 0);
+var opening_dist = 0;
+var mt = new mat4();
 
 var music = {};
 
@@ -106,6 +112,7 @@ function Animation()
 
 		self.m_angled_cylinder = new angled_cylinder(50, mat4() );
 		self.m_half_sphere = new half_sphere(mat4(), 4);
+		self.m_crystal = new crystal(mat4());
 
 
 		var new_music = new Audio("002-kazumi-totaka-mii-plaza.mp3");
@@ -148,9 +155,10 @@ function Animation()
 		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
 		music["blast_off"] = new_music
 
-		self.GAME_OVER_UI = new GraphicsState(mat4(), mat4(), 0);
-		self.m_text = new text_line(50); 
-		self.m_text.set_string("GAME OVER. Press Enter to Retry.");
+		new_music = new Audio("torture.mp3")
+		new_music.loop = false;
+		new_music.addEventListener("loadeddata", function() {new_music.currentTime=0;}); 
+		music["torture"] = new_music
 		
 		// 1st parameter is camera matrix.  2nd parameter is the projection:  The matrix that determines how depth is treated.  It projects 3D points onto a plane.
 		self.graphicsState = new GraphicsState( translate(0, 0,-40), perspective(45, canvas.width/canvas.height, .1, 1000), 0 );
@@ -182,7 +190,8 @@ Animation.prototype.init_keys = function()
 	shortcut.add("Enter", function() {
 		animate = true; 
 		reset_game();
-		game_state = 2; })
+		game_state = 2; 
+		direction = 0;})
 	shortcut.add( "z",     function() { thrust[1] =  1; } );			shortcut.add( "z",     function() { thrust[1] =  0; }, {'type':'keyup'} );
 	shortcut.add( "w",     function() { thrust[2] =  1; } );			shortcut.add( "w",     function() { thrust[2] =  0; }, {'type':'keyup'} );
 	shortcut.add( "a",     function() { thrust[0] =  1; } );			shortcut.add( "a",     function() { thrust[0] =  0; }, {'type':'keyup'} );
@@ -407,16 +416,255 @@ Animation.prototype.display = function(time)
 		/**********************************
 		Start coding here!!!!
 		**********************************/
-
-		var mt = mult(new mat4(), rotate(-90, vec3(0,1,0)));
-			mt = mult( mt, translate( .1, -.9, .9 ) );
-			mt = mult(model_transform, scale(100, 0.75, 0.05));
-			this.m_text.draw(this.GAME_OVER_UI, mt, true, vec4(1,1,1,1));
-
-
-
 		var stack = new Array();
 		stack.push(model_transform);
+
+	if (game_state === 0) {
+		// draw earth
+		// draw space stars
+		// draw space ship
+		opening_delta += this.animation_delta_time;
+
+		if (game_delta < 5100) {
+			this.draw_space(model_transform);
+			this.draw_earth(model_transform);
+			model_transform = mult(model_transform, translate(player.pos_x - 10, player.pos_y - 20, player.pos_z + 20));
+			this.draw_space_ship(model_transform);
+			music["abduction"].play();
+		}
+		if (game_delta > 1000 && game_delta < 3000) {
+			player.pos_x += 0.06 * 0.04 * this.animation_delta_time * velocity;
+			player.pos_y += 0.06 * 0.03 * this.animation_delta_time * velocity + Math.sin(to_radians(game_delta/100));
+			player.pos_z -= 0.06 * 0.05 * this.animation_delta_time * velocity;
+			velocity += 0.01 * this.animation_delta_time;
+		}
+		if (game_delta > 3000 && game_delta < 3700) {
+			player.pos_x -= 0.06 * 0.04 * this.animation_delta_time * velocity;
+			player.pos_y -= 0.06 * 0.03 * this.animation_delta_time * velocity + Math.sin(to_radians(game_delta/100));
+			player.pos_z -= 0.06 * 0.03 * this.animation_delta_time * velocity;
+			velocity += 0.01 * this.animation_delta_time;
+		}
+		if (game_delta > 3700 && game_delta < 4400) {
+			player.pos_x -= 0.06 * 0.03 * this.animation_delta_time;
+			player.pos_y -= 0.06 * 0.03 * this.animation_delta_time;
+			player.pos_z -= 0.06 * 0.03 * this.animation_delta_time;
+		}
+		if (game_delta > 3700 && game_delta < 5000) {
+			// player.pos_x -= 0.06 * 0.03 * this.animation_delta_time;
+			player.pos_y -= 0.06 * 0.03 * this.animation_delta_time;
+			player.pos_z -= 0.06 * 0.03 * this.animation_delta_time;
+		}
+		if (game_delta > 5000 && game_delta < 5100) {
+			player2.pos_x = 0;
+			player2.pos_y = 0;
+			player2.pos_z = 0;
+			player.pos_x = 0;
+			player.pos_y = 0;
+			player.pos_z = 0;
+			abducted_player.pos_x = -7;
+			abducted_player.pos_y = 2;
+			abducted_player.pos_z = 1;
+			abducted_player.direction = -90;
+			mt = translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z);
+		}
+
+		// person scene
+		if (game_delta > 5100) {
+			model_transform = mult(model_transform, scale(60, 0.2, 60));
+			this.m_cube.draw(this.graphicsState, model_transform, light_grass);
+			model_transform = stack.pop();
+			stack.push(model_transform);
+			this.draw_sky(model_transform);
+			model_transform = mult(model_transform, translate(player.pos_x, 2, player.pos_z));
+			model_transform = mult(model_transform, rotate(direction, 0, 1, 0));
+			this.draw_character(model_transform);
+			model_transform = stack.pop();
+			stack.push(model_transform);
+		}
+		if (game_delta > 5100 && game_delta < 7000) {
+			// draw ground plane and sky
+			
+			var cam_x_dist = game_delta/700 * Math.cos(to_radians(player2.direction));
+			var cam_z_dist = game_delta/700 * Math.sin(to_radians(player2.direction));
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player2.pos_x - cam_x_dist;
+			eye_y = player2.pos_y + 2;
+			eye_z = player2.pos_z - cam_z_dist;
+
+			var at = vec3(player2.pos_x, player2.pos_y, player2.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+			opening_dist = Math.max(cam_x_dist, opening_dist);
+		}
+
+		if (game_delta > 7000 && game_delta < 9500) {
+			// draw someone getting abducted
+			// play a scream
+			music["torture"].play();
+			model_transform = mult(model_transform, translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z));
+			model_transform = mult(model_transform, rotate(abducted_player.direction, 0, 1, 0));
+			this.draw_victim(model_transform, abducted_player);
+			this.draw_ray(mt);
+
+			abducted_player.pos_y += 0.02;
+			model_transform = stack.pop();
+			stack.push(model_transform);
+
+			var cam_x_dist = opening_dist * Math.cos(to_radians(player2.direction));
+			var cam_z_dist = opening_dist * Math.sin(to_radians(player2.direction));
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player2.pos_x - cam_x_dist;
+			eye_y = player2.pos_y + 2;
+			eye_z = player2.pos_z - cam_z_dist;
+
+			var at = vec3(player2.pos_x, player2.pos_y, player2.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+
+		if (game_delta > 9500 && game_delta < 12000) {
+			var cam_x_dist = opening_dist * Math.cos(to_radians(player2.direction));
+			var cam_z_dist = opening_dist * Math.sin(to_radians(player2.direction));
+			if (player2.direction > -90)
+				player2.direction -= 1;
+			if (player2.pos_y + 0.01 > player.pos_y)
+				player2.pos_y -= 0.05
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player2.pos_x - cam_x_dist;
+			eye_y = player2.pos_y + 2;
+			eye_z = player2.pos_z - cam_z_dist;
+
+			var at = vec3(player2.pos_x, player2.pos_y, player2.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+
+		if (game_delta > 12000 && game_delta < 13500) {
+			var cam_x_dist = opening_dist * Math.cos(to_radians(player2.direction));
+			var cam_z_dist = opening_dist * Math.sin(to_radians(player2.direction));
+
+			if (player2.pos_z - cam_z_dist - 0.75 > player.pos_z)
+				player2.pos_z -=0.2;
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player2.pos_x - cam_x_dist;
+			eye_y = player2.pos_y + 2;
+			eye_z = player2.pos_z - cam_z_dist;
+
+			var at = vec3(player2.pos_x, player2.pos_y, player2.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+
+		// squint
+		if (game_delta > 13500 && game_delta < 16000) {
+			var cam_x_dist = opening_dist * Math.cos(to_radians(player2.direction));
+			var cam_z_dist = opening_dist * Math.sin(to_radians(player2.direction));
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player2.pos_x - cam_x_dist;
+			eye_y = player2.pos_y + 2;
+			eye_z = player2.pos_z - cam_z_dist;
+
+			var at = vec3(player2.pos_x, player2.pos_y, player2.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			if (player.eye_y > 0.01) 
+				player.eye_y-= 0.005;
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+
+		// rotate behind
+		if (game_delta > 16000 && game_delta < 17000) {
+			var cam_x_dist = Math.cos(to_radians(player2.direction));
+			var cam_z_dist = Math.sin(to_radians(player2.direction));
+			if (player2.direction > -270)
+				player2.direction -= 5;
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player.pos_x - cam_x_dist;
+			eye_y = player.pos_y + 2;
+			eye_z = player.pos_z - cam_z_dist;
+
+			var at = vec3(player.pos_x, player.pos_y + 2, player.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+
+		// shoot
+		if (game_delta > 17000 && game_delta < 17100) {
+			var cam_x_dist = Math.cos(to_radians(player2.direction));
+			var cam_z_dist = Math.sin(to_radians(player2.direction));
+
+			music["shoot"].play();
+			var eye_x, eye_y, eye_z;
+			eye_x = player.pos_x - cam_x_dist - 0.263;
+			eye_y = player.pos_y + 2 - 0.15;
+			eye_z = player.pos_z - cam_z_dist + 0.2;
+
+			var at = vec3(player.pos_x - 0.263, player.pos_y + 2 - 0.1, player.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			opening_bullet.pos_x = eye_x - 0.005;
+			opening_bullet.pos_y = eye_y;
+			opening_bullet.pos_z = eye_z + 0.3;
+
+			player2.pos_x = opening_bullet.pos_x;
+			player2.pos_y = opening_bullet.pos_y;
+			player2.pos_z = opening_bullet.pos_z + 20;
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+
+		if (game_delta > 17100 && game_delta < 18500) {
+			model_transform = stack.pop();
+			stack.push(model_transform);
+			model_transform = mult(model_transform, translate(opening_bullet.pos_x, opening_bullet.pos_y, opening_bullet.pos_z))
+			model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+			this.draw_bullet(model_transform);
+
+			model_transform = stack.pop();
+			stack.push(model_transform);
+			model_transform = mult(model_transform, translate(player2.pos_x, player2.pos_y, player2.pos_z))
+			this.draw_player(model_transform);
+
+			var cam_x_dist = Math.cos(to_radians(player2.direction));
+			var cam_z_dist = Math.sin(to_radians(player2.direction));
+
+			var eye_x, eye_y, eye_z;
+			eye_x = opening_bullet.pos_x - cam_x_dist;
+			eye_y = opening_bullet.pos_y;
+			eye_z = opening_bullet.pos_z - cam_z_dist;
+
+			var at = vec3(opening_bullet.pos_x , opening_bullet.pos_y , opening_bullet.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
+
+			opening_bullet.pos_z += 0.005 * velocity;
+			velocity += 0.1;
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
+		}
+		if (game_delta > 18500) {
+			music["boom"].play();
+			game_state = 1;
+		}
+	}
 
 	if (game_state > 1) {
 		this.draw_sky(model_transform);
@@ -492,7 +740,7 @@ Animation.prototype.display = function(time)
 								enemy.direction += 270; // eventually change this to random
 								break;
 						}
-					enemy.steps = 2;
+					enemy.steps = num;
 				}
 				else {
 					var x_to_go = board.enemy_arr[i].pos_x + 0.06 * 0.05 * 1.4 * 
@@ -522,6 +770,11 @@ Animation.prototype.display = function(time)
 						board.enemy_arr[i].pos_z += 0.06 * 0.05 * 1.4 * 
 												this.animation_delta_time * 
 												Math.sin(to_radians(board.enemy_arr[i].direction));
+						enemy.moved += 0.06 * 0.05 * 1.4 * this.animation_delta_time;
+						if (enemy.moved > 5) {
+							enemy.moved = 0;
+							enemy.steps--;
+						}
 						if (!player.dead &&
 							grid_x === display_coord_to_grid_coord(player.pos_x) && grid_z === display_coord_to_grid_coord(player.pos_z)) {
 							player.dead = true;
@@ -637,9 +890,6 @@ Animation.prototype.display = function(time)
 
 		}
 		if (death_delta > 8000) {
-			var mt = mult(mat4(), rotate(0, vec3(0,1,0)));
-			mt = mult(model_transform, scale(1, 0.75, 0.05));
-			this.m_text.draw(this.GAME_OVER_UI, mt, true, vec4(1,1,1,1));
 			music["blast_off"].pause();
 		}
 	}
@@ -667,6 +917,10 @@ Animation.prototype.update_strings = function( debug_screen_object )		// Strings
 		debug_screen_object.end_game = "GAME OVER!!";
 		debug_screen_object.try_again = "Press Enter to play again!"
 	}
+	else if (game_state === 1) {
+		debug_screen_object.end_game = "SPACE BOMBER";
+		debug_screen_object.try_again = "Press Enter to start game!"
+	}
 	else {
 		debug_screen_object.end_game = "";
 		debug_screen_object.try_again = ""
@@ -682,6 +936,11 @@ Animation.prototype.draw_sky = function (model_transform) {
 
 Animation.prototype.draw_death = function (model_transform) {
 
+}
+
+Animation.prototype.draw_earth = function (model_transform) {
+	model_transform = mult(model_transform, scale(2, 2, 2));
+	this.m_sphere.draw(this.graphicsState, model_transform, earth);
 }
 
 Animation.prototype.draw_landmine = function(model_transform) {
@@ -700,13 +959,13 @@ Animation.prototype.draw_character = function (model_transform, color) {
 
 		// eyes
 		// model_transform = mult(model_transform, translate(-0.4, 0, 1));
-		model_transform = mult(model_transform, rotate(10, 1, 0, 0));
-		model_transform = mult(model_transform, translate(-0.4, 0, 1));
+		model_transform = mult(model_transform, rotate(12, 1, 0, 0));
+		model_transform = mult(model_transform, translate(-0.35, 0, 0.9));
 		this.draw_eye(model_transform, new Material( vec4( 0, 0, 0,1 ), 1, 1, 1, 40 ));
-		model_transform = mult(model_transform, translate(0.8, 0, 0));
+		model_transform = mult(model_transform, translate(0.7, 0, 0));
 		this.draw_eye(model_transform, new Material( vec4( 0, 0, 0,1 ), 1, 1, 1, 40 ));
-		model_transform = mult(model_transform, translate(-0.4, 0, -1));
-		model_transform = mult(model_transform, rotate(-10, 1, 0, 0));
+		model_transform = mult(model_transform, translate(-0.35, 0, -0.9));
+		model_transform = mult(model_transform, rotate(-12, 1, 0, 0));
 
 		model_transform = mult(model_transform, translate(0, -1.75, 0));
 
@@ -887,7 +1146,6 @@ Animation.prototype.draw_arm_right = function(model_transform) {
 }
 
 Animation.prototype.draw_body = function(model_transform) {
-	// model_transform = mult(model_transform, scale(1, 0.75, 1));
 	this.draw_angled_cylinder(model_transform, player.body_color);
 
 	return model_transform;
@@ -1012,12 +1270,35 @@ Animation.prototype.draw_bullet = function (model_transform) {
 }
 
 Animation.prototype.draw_player = function(model_transform) {
-	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
-	this.m_sphere.draw(this.graphicsState, model_transform, sky);
-	model_transform = mult(model_transform, translate(0, 0, 0.5));
-	this.m_sphere.draw(this.graphicsState, model_transform, camo);
-	model_transform = mult(model_transform, translate(0.5, 0, -0.5));
-	this.m_sphere.draw(this.graphicsState, model_transform, purplePlastic);
+	model_transform = mult(model_transform, scale(0.5, -0.5, 0.5));
+	var mt = model_transform;
+	model_transform = mult(model_transform, translate(0, 1, 0));
+	this.m_sphere.draw(this.graphicsState, model_transform, blue);
+	model_transform = mult(model_transform, rotate(90, 1, 0, 0));
+	model_transform = mult(model_transform, translate(1, 0.3, 0));
+	model_transform = mult(model_transform, scale(0.3, 0.3, 0.3));
+	this.m_sphere.draw(this.graphicsState, model_transform, red);
+	model_transform = mult(model_transform, scale(1/0.3, 1/0.3, 1/0.3));
+	model_transform = mult(model_transform, translate(0, -0.6, 0));
+	model_transform = mult(model_transform, scale(0.3, 0.3, 0.3));
+	this.m_sphere.draw(this.graphicsState, model_transform, red);
+	
+
+	model_transform = mt;
+	// this.m_crystal.draw(this.graphicsState, model_transform, sky);
+	// model_transform = mult(model_transform, translate(0, 0, 0.5));
+	// this.m_crystal.draw(this.graphicsState, model_transform, camo);
+	// model_transform = mult(model_transform, translate(0.5, 0, -0.5));
+	for (var i = 0; i < 3; i++) {
+		this.m_crystal.draw(this.graphicsState, model_transform, purplePlastic);
+		model_transform = mult(model_transform, rotate(360/3, 0, 0, 1));		
+	}
+	model_transform = mult(model_transform, rotate(90, 0, 1, 0));
+		for (var i = 0; i < 3; i++) {
+		this.m_crystal.draw(this.graphicsState, model_transform, purplePlastic);
+		model_transform = mult(model_transform, rotate(360/3, 0, 0, 1));		
+	}
+
 	return model_transform;
 }
 
@@ -1067,13 +1348,11 @@ Animation.prototype.draw_ray = function (model_transform) {
 	this.draw_angled_cylinder(model_transform, yellow);
 }
 
-function Control() {
-	// controls the game
-
-	// create a board
-	// create a player
-
-
+Animation.prototype.draw_space = function(model_transform) {
+	model_transform = mult(model_transform, translate(0, 0, -100))
+	 model_transform = mult(model_transform, scale(200, 150, 1));
+	// this.m_strip.draw(this.graphicsState, model_transform, ground.GROUND_MATERIAL);
+	this.m_cube.draw(this.graphicsState, model_transform, star_background);
 }
 
 
@@ -1170,6 +1449,8 @@ function Player(x, y, z) {
 	this.lower_left_leg_angle_x = 0;
 	this.lower_right_leg_angle_x = 0;
 
+	this.direction = 0;
+
 	this.eye_y = 0.1;
 	this.mines = 3;
 	this.mines_arr = new Array();
@@ -1188,6 +1469,15 @@ function reset_game() {
 	player.score = 0;
 	player.mines = 3;
 	player.dead = false;
+
+	death_delta = 0;
+	death_cam_dist = 2.5;
+	death_angle = 0;
+	velocity = 1;
+
+	block_upper_leg = false;
+	block_pivot = false;
+	walk_in_place_block = false;
 	for (var i = 0; i < board.MAX_ENEMIES; i++) {
 		board.enemy_arr[i].pos_x = 0;
 		board.enemy_arr[i].pos_y = 0;
@@ -1342,7 +1632,7 @@ function pivot() {
 	}
 }
 
-function raise_arm(delta) {
+function raise_arm(delta, player) {
 	if (player.upper_arm_angle_x !== arm_stop_angle) {
 		if (arms_up) {
 			player.upper_arm_angle_x += delta/3;
@@ -1622,4 +1912,58 @@ function Flower() {
 	this.STEM_SEG_Z = 0.5;
 }
 
+Animation.prototype.draw_victim = function (model_transform, player) {
+
+		var stack = new Array();
+		model_transform = mult(model_transform, scale(0.25, 0.25, 0.25));
+		stack.push(model_transform);
+		// head and cap
+		this.draw_cap(model_transform, red);
+		this.m_sphere.draw(this.graphicsState, model_transform, player.skin_color);
+
+		// eyes
+		// model_transform = mult(model_transform, translate(-0.4, 0, 1));
+		model_transform = mult(model_transform, rotate(12, 1, 0, 0));
+		model_transform = mult(model_transform, translate(-0.35, 0, 0.9));
+		this.draw_eye(model_transform, new Material( vec4( 0, 0, 0,1 ), 1, 1, 1, 40 ));
+		model_transform = mult(model_transform, translate(0.7, 0, 0));
+		this.draw_eye(model_transform, new Material( vec4( 0, 0, 0,1 ), 1, 1, 1, 40 ));
+		model_transform = mult(model_transform, translate(-0.35, 0, -0.9));
+		model_transform = mult(model_transform, rotate(-12, 1, 0, 0));
+
+		model_transform = mult(model_transform, translate(0, -1.75, 0));
+
+		// body
+		model_transform = mult(model_transform, scale(1, 1, 0.7));
+		this.draw_body(model_transform, player.body_color);
+		model_transform = mult(model_transform, scale(1, 1, 1/0.7));
+		model_transform = mult(model_transform, translate(0, -1, 0));
+		model_transform = mult(model_transform, scale(1, 0.7, 0.7));
+		this.draw_bottom_half_sphere(model_transform, player.butt_color);
+		model_transform = mult(model_transform, scale(1, 1/0.7, 1/0.7));
+		model_transform = mult(model_transform, translate(-0.5, -0.2, 0));
+
+		// legs
+		model_transform = mult(model_transform, scale(0.9, 1, 1));
+		this.draw_leg_right(model_transform);
+		model_transform = mult(model_transform, scale(1/0.9, 1, 1));
+		model_transform = mult(model_transform, translate(1, 0, 0));
+		model_transform = mult(model_transform, scale(0.9, 1, 1));
+		this.draw_leg_left(model_transform);
+		model_transform = mult(model_transform, scale(1/0.9, 1, 1));
+
+		model_transform = stack.pop();
+		// arms?
+		model_transform = mult(model_transform, translate(0, -1, 0));
+		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_x, 1, 0, 0));
+		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_z, 0, 0, 1));
+		this.draw_arm_right(model_transform);
+
+		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, translate(0.8, 0, 0));
+		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_x - player.upper_left_arm_angle_x, 1, 0, 0));
+		model_transform = mult(model_transform, rotate(player.upper_left_arm_angle_z, 0, 0, 1));
+		this.draw_arm_left(model_transform);
+
+}
 
