@@ -90,6 +90,10 @@ function Debug_Screen()
 {	this.string_map = { };	this.m_text = new text_line( 30 ); 		this.start_index = 2;	this.tick = 0;
 	this.end_game = ""
 	this.try_again =""
+	this.controls0 = ""
+	this.controls1 = ""
+	this.controls2 = ""
+	this.controls3 = ""
 	this.graphicsState = new GraphicsState( mat4(), mat4(), 0 );
 }
 
@@ -109,21 +113,51 @@ function Debug_Screen()
 				this.m_text.set_string(this.end_game);
 				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
 
-				mt = mult(mt, translate(0, -1, 5));
+				mt = mult(mt, scale(1/2, 1/2, 1/2));
+
+				mt = mult(mt, translate(0, -3, 0));
 				this.m_text.set_string(this.try_again);
+				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
+
+				mt = mult(mt, translate(0, -1, 0));
+				this.m_text.set_string(this.controls0);
+				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
+
+				mt = mult(mt, translate(0, -1, 0));
+				this.m_text.set_string(this.controls1);
+				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
+
+				mt = mult(mt, translate(0, -1, 0));
+				this.m_text.set_string(this.controls2);
+				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
+
+				mt = mult(mt, translate(0, -1, 0));
+				this.m_text.set_string(this.controls3);
 				this.m_text.draw(this.graphicsState, mt, true, vec4(1,1,1,1));
 
 			}
 		
 			
-			var strings = Object.keys( this.string_map );
+			// var strings = Object.keys( this.string_map );
 			
-			for( var i = 0, idx = this.start_index; i < 4 && i < strings.length; i++, idx = (idx + 1) % strings.length )
-			{
-				this.m_text.set_string( this.string_map[ strings[idx] ] );
-				this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI			
-				model_transform = mult( model_transform, translate( 0, 1, 0 ) );
-			} 
+			// for( var i = 0, idx = this.start_index; i < 4 && i < strings.length; i++, idx = (idx + 1) % strings.length )
+			// {
+			// 	this.m_text.set_string( this.string_map[ strings[idx] ] );
+			// 	this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI			
+			// 	model_transform = mult( model_transform, translate( 0, 1, 0 ) );
+			// } 
+
+			this.m_text.set_string( this.string_map[ "score" ] );
+			this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI			
+			model_transform = mult( model_transform, translate( 0, 1, 0 ) );
+
+			this.m_text.set_string( this.string_map[ "mines" ] );
+			this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI			
+			model_transform = mult( model_transform, translate( 0, 1, 0 ) );
+
+			this.m_text.set_string( this.string_map[ "frame" ] );
+			this.m_text.draw( this.graphicsState, model_transform, true, vec4(1,1,1,1) );		// Comment this out to not display any strings on the UI			
+			model_transform = mult( model_transform, translate( 0, 1, 0 ) );
 			
 			// model_transform     = mult( model_transform, translate( 0, 20, -32 ) );
 			// // this.m_text.set_string( "Controls" );

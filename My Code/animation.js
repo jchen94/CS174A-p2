@@ -34,7 +34,7 @@ var speed = 1.5;
 // game state 1 for title screen
 // game state 2 for in game
 // game state 3 for end seq
-var game_state = 0;
+var game_state = -1;
 
 var top_view = false;
 
@@ -207,7 +207,7 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+g", function() { gouraud = !gouraud;				gl.uniform1i( g_addrs.GOURAUD_loc, gouraud);	} );
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
-	shortcut.add( "0", function() { music["wii"].play(); })
+	shortcut.add( "0", function() { game_state = 0; game_delta = 0;})
 	shortcut.add( "9", function() { walk_in_place(); })
 	shortcut.add( "m", function() { 
 		if (player.mines > 0) {
@@ -356,9 +356,11 @@ Animation.prototype.display = function(time)
 		if(animate) this.graphicsState.animation_time += this.animation_delta_time;
 		prev_time = time;
 		game_delta += this.animation_delta_time;
+		// game_delta = this.graphicsState.animation_time;
 
-		if (game_state === 0)
+		if (game_state === 0) {
 			update_camera( this, this.animation_delta_time );
+		}
 			
 		this.basis_id = 0;
 		
@@ -366,6 +368,8 @@ Animation.prototype.display = function(time)
 
 		// in game: camera follows human
 		if (game_state === 2) {
+			music["wii"].pause();
+			music["training"].play();
 			if (block_pivot)
 				pivot();
 
@@ -423,7 +427,6 @@ Animation.prototype.display = function(time)
 		// draw earth
 		// draw space stars
 		// draw space ship
-		opening_delta += this.animation_delta_time;
 
 		if (game_delta < 5100) {
 			this.draw_space(model_transform);
@@ -466,6 +469,7 @@ Animation.prototype.display = function(time)
 			abducted_player.pos_z = 1;
 			abducted_player.direction = -90;
 			mt = translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z);
+
 		}
 
 		// person scene
@@ -504,6 +508,7 @@ Animation.prototype.display = function(time)
 			// draw someone getting abducted
 			// play a scream
 			music["torture"].play();
+			raise_arm(this.animation_delta_time);
 			model_transform = mult(model_transform, translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z));
 			model_transform = mult(model_transform, rotate(abducted_player.direction, 0, 1, 0));
 			this.draw_victim(model_transform, abducted_player);
@@ -553,7 +558,7 @@ Animation.prototype.display = function(time)
 			var cam_z_dist = opening_dist * Math.sin(to_radians(player2.direction));
 
 			if (player2.pos_z - cam_z_dist - 0.75 > player.pos_z)
-				player2.pos_z -=0.2;
+				player2.pos_z -=0.2 * this.animation_delta_time * 0.06;
 
 			var eye_x, eye_y, eye_z;
 			eye_x = player2.pos_x - cam_x_dist;
@@ -582,13 +587,13 @@ Animation.prototype.display = function(time)
 			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
 
 			if (player.eye_y > 0.01) 
-				player.eye_y-= 0.005;
+				player.eye_y-= 0.005 * this.animation_delta_time * 0.06;
 
 			this.graphicsState.camera_transform = lookAt(eye, at, up);
 		}
 
 		// rotate behind
-		if (game_delta > 16000 && game_delta < 17000) {
+		if (game_delta > 16000 && game_delta < 18000) {
 			var cam_x_dist = Math.cos(to_radians(player2.direction));
 			var cam_z_dist = Math.sin(to_radians(player2.direction));
 			if (player2.direction > -270)
@@ -607,7 +612,7 @@ Animation.prototype.display = function(time)
 		}
 
 		// shoot
-		if (game_delta > 17000 && game_delta < 17100) {
+		if (game_delta > 18000 && game_delta < 18100) {
 			var cam_x_dist = Math.cos(to_radians(player2.direction));
 			var cam_z_dist = Math.sin(to_radians(player2.direction));
 
@@ -632,7 +637,7 @@ Animation.prototype.display = function(time)
 			this.graphicsState.camera_transform = lookAt(eye, at, up);
 		}
 
-		if (game_delta > 17100 && game_delta < 18500) {
+		if (game_delta > 18100 && game_delta < 19500) {
 			model_transform = stack.pop();
 			stack.push(model_transform);
 			model_transform = mult(model_transform, translate(opening_bullet.pos_x, opening_bullet.pos_y, opening_bullet.pos_z))
@@ -642,7 +647,10 @@ Animation.prototype.display = function(time)
 			model_transform = stack.pop();
 			stack.push(model_transform);
 			model_transform = mult(model_transform, translate(player2.pos_x, player2.pos_y, player2.pos_z))
+			model_transform = mult(model_transform, rotate (90, 0, 1, 0));
 			this.draw_player(model_transform);
+			model_transform = stack.pop();
+			stack.push(model_transform);
 
 			var cam_x_dist = Math.cos(to_radians(player2.direction));
 			var cam_z_dist = Math.sin(to_radians(player2.direction));
@@ -660,10 +668,79 @@ Animation.prototype.display = function(time)
 			velocity += 0.1;
 			this.graphicsState.camera_transform = lookAt(eye, at, up);
 		}
-		if (game_delta > 18500) {
+		if (game_delta > 19500) {
 			music["boom"].play();
 			game_state = 1;
+
 		}
+	}
+
+	if (game_state === 1) {
+		this.draw_space(mat4());
+		opening_delta += this.animation_delta_time;
+		music["wii"].play();
+
+		if (opening_delta  > 0 && opening_delta < 1000) {
+			player.pos_x = -15;
+			player.pos_y = -2;
+			player.pos_z = 0;
+
+			abducted_player.pos_x = -7;
+			abducted_player.pos_y = -2.1;
+			abducted_player.pos_z = 0;
+		}
+		var a_mt = model_transform;
+		if (opening_delta > 1000) {
+			model_transform = mult(model_transform, translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z));
+			this.draw_player(model_transform);
+
+			model_transform = a_mt;
+
+			if (opening_delta < 7500) {
+				model_transform = mult(model_transform, translate (player.pos_x, player.pos_y, player.pos_z));
+				model_transform = mult(model_transform, rotate( 90, 0, 1, 0));
+				this.draw_character(model_transform);
+			}
+
+			model_transform = a_mt;
+			model_transform = mult(model_transform, translate(player.pos_x, abducted_player.pos_y + 4.6, player.pos_z));
+			model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+			this.draw_space_ship(model_transform);
+		}
+
+		if (opening_delta  > 1000 && opening_delta < 6200) {
+			abducted_player.pos_x += 0.06 * 0.05 * this.animation_delta_time;
+			walk_in_place(this.animation_delta_time);
+			player.pos_x += 0.06 * 0.05 * this.animation_delta_time;
+		}
+
+		if (opening_delta > 5500 && opening_delta < 7500) {
+			model_transform = a_mt;
+			model_transform = mult(model_transform, translate(player.pos_x, abducted_player.pos_y + 1.9, player.pos_z));
+			model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
+			this.draw_ray(model_transform);
+		}
+
+		if (opening_delta > 5800 && opening_delta < 7500) {
+			walk_in_place(this.animation_delta_time);
+			player.pos_y += 0.05;
+		}
+
+		if (opening_delta > 7500 && opening_delta < 10000) {
+			abducted_player.pos_y+=0.01 * 0.06 * 0.05 * this.animation_delta_time * velocity;
+			velocity += 0.5;
+		}
+
+		if (opening_delta > 10000) {
+			opening_delta = 0;
+			velocity = 1;
+		}
+
+		var at = vec3(0, 0, 0);
+		var eye = vec3(0, 0, 10);
+		var up = vec3(0, 1, 0);
+
+		this.graphicsState.camera_transform = lookAt(eye, at, up);
 	}
 
 	if (game_state > 1) {
@@ -780,7 +857,7 @@ Animation.prototype.display = function(time)
 							player.dead = true;
 							music["dead"].currentTime = 0;
 							music["dead"].play(); 
-							console.log("YOU DIED!");
+							// console.log("YOU DIED!");
 							game_state = 3;
 						}
 					}
@@ -858,6 +935,7 @@ Animation.prototype.display = function(time)
 	} // END GAME PLAY 2
 
 	if (game_state === 3) {
+		music["training"].pause();
 		var space = mult(model_transform, translate(player.pos_x, 14, player.pos_z));
 		this.draw_space_ship(space);
 
@@ -903,27 +981,39 @@ Animation.prototype.display = function(time)
 Animation.prototype.update_strings = function( debug_screen_object )		// Strings this particular class contributes to the UI
 {
 	var time = 1;
-	debug_screen_object.string_map["ani_delta"] = "Time Delta: " + this.animation_delta_time;
+	// debug_screen_object.string_map["ani_delta"] = "Time Delta: " + this.animation_delta_time;
 	debug_screen_object.string_map["frame"] = "FPS: " + Math.round(1/(this.animation_delta_time/1000), 1) + " fps";
-	debug_screen_object.string_map["time"] = "Animation Time: " + this.graphicsState.animation_time/1000 + "s";
-	debug_screen_object.string_map["basis"] = "Showing basis: " + this.m_axis.basis_selection;
+	// debug_screen_object.string_map["time"] = "Animation Time: " + this.graphicsState.animation_time/1000 + "s";
+	// debug_screen_object.string_map["basis"] = "Showing basis: " + this.m_axis.basis_selection;
 	debug_screen_object.string_map["score"] = "Score: " + player.score;
-	debug_screen_object.string_map["animate"] = "Animation " + (animate ? "on" : "off") ;
+	// debug_screen_object.string_map["animate"] = "Animation " + (animate ? "on" : "off") ;
 	debug_screen_object.string_map["mines"] = "Mines available: " + player.mines;
-	debug_screen_object.string_map["thrust"] = "Thrust: " + thrust;
-	debug_screen_object.string_map["direction]"] = "Direction: " + direction;
+	// debug_screen_object.string_map["thrust"] = "Thrust: " + thrust;
+	// debug_screen_object.string_map["direction]"] = "Direction: " + direction;
 
 	if (game_state === 4) {
 		debug_screen_object.end_game = "GAME OVER!!";
 		debug_screen_object.try_again = "Press Enter to play again!"
+		debug_screen_object.controls0 = ""
+		debug_screen_object.controls1 = ""
+		debug_screen_object.controls2 = ""
+		debug_screen_object.controls3 = ""
 	}
 	else if (game_state === 1) {
 		debug_screen_object.end_game = "SPACE BOMBER";
 		debug_screen_object.try_again = "Press Enter to start game!"
+		debug_screen_object.controls0 = "Press Space to shoot a bullet."
+		debug_screen_object.controls1 = "Press m to place a mine."
+		debug_screen_object.controls2 = "Press Arrow Keys to move."
+		debug_screen_object.controls3 = "Press Enter to reset game."
 	}
 	else {
 		debug_screen_object.end_game = "";
 		debug_screen_object.try_again = ""
+		debug_screen_object.controls0 = ""
+		debug_screen_object.controls1 = ""
+		debug_screen_object.controls2 = ""
+		debug_screen_object.controls3 = ""
 	}
 }
 
@@ -1462,6 +1552,8 @@ function Player(x, y, z) {
 }
 
 function reset_game() {
+	music["training"].currentTime=0;
+
 	player.pos_x = 0;
 	player.pos_y = board.BOARD_UNIT_SIZE/2 + 0.5;
 	player.pos_z = 0;
@@ -1487,6 +1579,26 @@ function reset_game() {
 		board.enemy_arr[i].spawned = false;
 
 	}
+
+	player.upper_left_arm_angle_z = 30;
+	player.lower_left_arm_angle_z = 10;
+	player.upper_left_arm_angle_x = 0;
+	player.lower_left_arm_angle_x = -90;
+
+	player.upper_right_arm_angle_z = 30;
+	player.lower_right_arm_angle_z = 10;
+	player.upper_right_arm_angle_x = -30;
+	player.lower_right_arm_angle_x = -110;
+
+	player.upper_left_leg_angle_z = 0;
+	player.lower_left_leg_angle_z = 0;
+	player.upper_right_leg_angle_z = 0;
+	player.lower_right_leg_angle_z = 0;
+
+	player.upper_left_leg_angle_x = 0;
+	player.upper_right_leg_angle_x = 0;
+	player.lower_left_leg_angle_x = 0;
+	player.lower_right_leg_angle_x = 0;
 }
 
 function Mine() {
@@ -1583,13 +1695,14 @@ function gen_steps() {
 // for now, just have enemies appear and stand still
 function spawn_enemy() {
  	// have enemies spawn in a random corner? let's just have it at top left for now.
+ 	var num = Math.round(3 * Math.random()) * 2;
  	for (var i = 0; i < board.enemy_arr.length; i++) {
  		if (!board.enemy_arr[i].spawned)
  		{
  			board.enemy_arr[i].spawned = true;
- 			board.enemy_arr[i].pos_x = grid_coord_to_display_coord(0);
+ 			board.enemy_arr[i].pos_x = grid_coord_to_display_coord(num);
  			board.enemy_arr[i].pos_y = board.BOARD_UNIT_SIZE/2;
- 			board.enemy_arr[i].pos_z = grid_coord_to_display_coord(0);
+ 			board.enemy_arr[i].pos_z = grid_coord_to_display_coord(num);
  			board.enemy_arr[i].steps = 2; // move 2 steps
  			board.enemy_arr[i].moved = 0;
  			board.enemy_arr[i].direction = 0; // down the board
@@ -1632,25 +1745,23 @@ function pivot() {
 	}
 }
 
-function raise_arm(delta, player) {
-	if (player.upper_arm_angle_x !== arm_stop_angle) {
+function raise_arm(delta) {
+	if (abducted_player.upper_arm_angle_x !== arm_stop_angle) {
 		if (arms_up) {
-			player.upper_arm_angle_x += delta/3;
+			abducted_player.upper_arm_angle_x += delta/3;
 
-			if (player.upper_arm_angle_x > arm_stop_angle)
-				player.upper_arm_angle_x = arm_stop_angle;
+			if (abducted_player.upper_arm_angle_x > arm_stop_angle)
+				abducted_player.upper_arm_angle_x = arm_stop_angle;
 		}
 		else {
-			player.upper_arm_angle_x -= delta/3;
-			if (player.upper_arm_angle_x < arm_stop_angle)
-				player.upper_arm_angle_x = arm_stop_angle;
+			abducted_player.upper_arm_angle_x -= delta/3;
+			if (abducted_player.upper_arm_angle_x < arm_stop_angle)
+				abducted_player.upper_arm_angle_x = arm_stop_angle;
 		}
 	}
 	else {
-		block_arm = false;
 		arm_stop_angle *= -1;
 		arms_up = !arms_up;
-		block_arm = true;
 	}
 }
 
@@ -1729,7 +1840,6 @@ function half_walk(delta) {
 					player.pos_x += to_move * Math.cos(to_radians(direction)) * back;
 					player.pos_x = Math.round(player.pos_x);
 					player.pos_z = Math.round(player.pos_z);
-					console.log("px:" + player.pos_x + "," + "pz: " + player.pos_z);
 				}
 			}
 		}
@@ -1755,7 +1865,7 @@ function half_walk(delta) {
 					player.pos_x += to_move * Math.cos(to_radians(direction)) * back;
 					player.pos_x = Math.round(player.pos_x);
 					player.pos_z = Math.round(player.pos_z);
-					console.log("px:" + player.pos_x + "," + "pz: " + player.pos_z);
+					//console.log("px:" + player.pos_x + "," + "pz: " + player.pos_z);
 				}
 			}
 		}
@@ -1809,6 +1919,7 @@ function walk_in_place(delta) {
 				player.upper_left_arm_angle_x = 10;
 				walk_in_place_block = false;
 				right_leg_forward = !right_leg_forward;
+				walk_phase = 0;
 			}
 		}
 		else {
@@ -1827,6 +1938,7 @@ function walk_in_place(delta) {
 				player.upper_left_arm_angle_x = 10;
 				walk_in_place_block = false;
 				right_leg_forward = !right_leg_forward;
+				walk_phase = 0;
 			}
 		}
 	}
@@ -1935,7 +2047,7 @@ Animation.prototype.draw_victim = function (model_transform, player) {
 
 		// body
 		model_transform = mult(model_transform, scale(1, 1, 0.7));
-		this.draw_body(model_transform, player.body_color);
+		this.draw_body(model_transform, red);
 		model_transform = mult(model_transform, scale(1, 1, 1/0.7));
 		model_transform = mult(model_transform, translate(0, -1, 0));
 		model_transform = mult(model_transform, scale(1, 0.7, 0.7));
@@ -1955,15 +2067,14 @@ Animation.prototype.draw_victim = function (model_transform, player) {
 		model_transform = stack.pop();
 		// arms?
 		model_transform = mult(model_transform, translate(0, -1, 0));
-		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_x, 1, 0, 0));
-		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, rotate(abducted_player.upper_right_arm_angle_x, 1, 0, 0));
+		model_transform = mult(model_transform, rotate(-abducted_player.upper_right_arm_angle_z, 0, 0, 1));
 		this.draw_arm_right(model_transform);
 
-		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, rotate(abducted_player.upper_right_arm_angle_z, 0, 0, 1));
 		model_transform = mult(model_transform, translate(0.8, 0, 0));
-		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_x - player.upper_left_arm_angle_x, 1, 0, 0));
-		model_transform = mult(model_transform, rotate(player.upper_left_arm_angle_z, 0, 0, 1));
+		model_transform = mult(model_transform, rotate(-abducted_player.upper_right_arm_angle_x - abducted_player.upper_left_arm_angle_x, 1, 0, 0));
+		model_transform = mult(model_transform, rotate(abducted_player.upper_left_arm_angle_z, 0, 0, 1));
 		this.draw_arm_left(model_transform);
 
 }
-
