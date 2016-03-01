@@ -1,0 +1,63 @@
+README: Space Bomber
+Scenario: Crystal aliens have invaded earth. They abducted your friend.
+You get angry, so you go and kill the aliens. However, the swarm is 
+endless, and you die.
+
+Gameplay: Move using the arrow keys.
+Left, right to look to your left and right;
+Up, down to move forward or backward.
+'.' to activate a top-down view of the board
+Space bar to shoot a bullet.
+'m' to plant a mine
+'Enter' to reset the game
+Aliens will spawn randomly (up to 5 on the board)
+
+[4 points] Show at least one two-level hierarchical object (e.g., a human arm).
+YES. The human is a complex hierarchical object. The joints for the body, arms, and legs, are organized
+in a hierarchy. The arms pivot around the shoulder and elbow, and the legs pivot around the lower body
+and knee.
+
+[4 points] Demonstrate the camera tracking a moving object using LookAt.
+YES. The first person POV is done using the lookAt function. Using the lookAt function, I was able to
+keep the camera at the right angle, and a fixed distance behind the player character, even as he rotates
+or moves forward/backward.
+
+[6 points] Design polygonal objects of your own. You must provide positions, normals, and texture
+coordinates directly, by extending the Shape class.
+YES. I created a crystal shape for the alien character. 
+I created a half-sphere for the character's helmet.
+I created an angled cylinder for the use of the sky world and several parts of the human's body. 
+
+[2 points] For one of your custom polygonal objects, show at least one flat-shaded seam (or discontinuous
+edge) and light it with the Phong reflection model.
+YES. Both the crystal and angled cylinder us flat shading and are lighted with the Phong reflection model.
+The crystal shows the flat shading more obviously.
+The angled cylinder is made of quite a few triangles, so it appears to look smoother than the crystal.
+
+[2 points] Texture one of your custom polygonal objects procedurally or by mapping an image.
+YES. Both the cystal and the angled cylinder have texture coordinates mapped appropriately.
+The sky is mapped to the angled cylinder, and looks quite nice. 
+The camo texture is mapped to the half-sphere as well.
+
+[2 points] Real-time speed. Make sure that your animation runs at the same speed regardless of the machine
+your program runs on; i.e., one simulated second corresponds roughly to one real second.
+YES. All animations are based off the animation time delta, and move proportionally to this variable, so that 
+my animations run at the same speed, even on different machines with different frame rates.
+
+[2 points] Display the frame rate of your program on the graphics window.
+YES. The frame rate can be seen at the bottom left corner of the screen. 
+
+[2 points] Make and submit a movie of your animation (length 90 sec or less) using your favorite screen
+recording application (e.g., camstudio/quicktime). If your program is interactive, submit a video of it being
+used. You can add subtitles. Make sure you encode your movie to within 100MB and observe the 90s limit.
+YES. I created a video of me playing the game. I did not add subtitles.
+
+I put in a lot of effort and time in creating this game, and I believe that it is fun, creative, and complex.
+The sound effects reall bring life the the game. I am pleased with the quality, though I wish I had more time 
+to implement better collision detection and incorporate more physics. A few of the objects do use the 
+"pseudo-velocity" as mentioned in discussion. I  tried to make a fluid walk, but it was more difficult than 
+I anticipated. Overall, I found this project fun and challenging, and I am pleased with what I have created :)
+[4 points] Creativity (story, aesthetic style, etc).
+[4 points] Complexity. Are the underlying mechanics that make it work impressive?
+[5 points] Overall quality: Fluidity of object and camera motion, attention to detail in scene construction
+and texturing, etc. 

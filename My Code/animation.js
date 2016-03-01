@@ -13,7 +13,8 @@ var canvas, canvas_size, gl = null, g_addrs,
 		var purplePlastic = new Material( vec4( .9,.5,.9,1 ), 1, 1, 1, 40 ), // Omit the string parameter if you want no texture
 			greyPlastic = new Material( vec4( .5,.5,.5,1 ), 1, 1, .5, 20 ),
 			blue = new Material(vec4(0, 0, 1, 0.5), 1, 1, 1, 20),
-			yellow = new Material(vec4(1, 1, 0, 0.5), 1, 1, 1, 20),
+			dark_blue = new Material(vec4(0, 0, 1, 1), 1, 1, 1, 20),
+			yellow = new Material(vec4(1, 1, 0, 0.3), 1, 1, 1, 20),
 			skin = new Material(vec4(1, 0.921569, 0.803922,1), 1, 1, 1, 20),
 			red = new Material( vec4 (1, 0, 0, 1), 1, 1, 1, 20),
 			earth = new Material( vec4( .5,.5,.5,1 ), 1, 0.5, 0, 40, "earth.gif" ),
@@ -34,7 +35,7 @@ var speed = 1.5;
 // game state 1 for title screen
 // game state 2 for in game
 // game state 3 for end seq
-var game_state = -1;
+var game_state = 0;
 
 var top_view = false;
 
@@ -199,7 +200,7 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "d",     function() { thrust[0] = -1; } );			shortcut.add( "d",     function() { thrust[0] =  0; }, {'type':'keyup'} );
 	shortcut.add( "f",     function() { looking = !looking; } );
 	shortcut.add( ",",     ( function(self) { return function() { self.graphicsState.camera_transform = mult( rotate( 3, 0, 0,  1 ), self.graphicsState.camera_transform ); }; } ) (this) ) ;
-	shortcut.add( ".",     ( function(self) { return function() { self.graphicsState.camera_transform = mult( rotate( 3, 0, 0, -1 ), self.graphicsState.camera_transform ); }; } ) (this) ) ;
+	// shortcut.add( ".",     ( function(self) { return function() { self.graphicsState.camera_transform = mult( rotate( 3, 0, 0, -1 ), self.graphicsState.camera_transform ); }; } ) (this) ) ;
 
 	shortcut.add( "r",     ( function(self) { return function() { self.graphicsState.camera_transform = mat4(); }; } ) (this) );
 	shortcut.add( "ALT+s", function() { solid = !solid;					gl.uniform1i( g_addrs.SOLID_loc, solid);	
@@ -208,7 +209,7 @@ Animation.prototype.init_keys = function()
 	shortcut.add( "ALT+n", function() { color_normals = !color_normals;	gl.uniform1i( g_addrs.COLOR_NORMALS_loc, color_normals);	} );
 	shortcut.add( "ALT+a", function() { animate = !animate; } );
 	shortcut.add( "0", function() { game_state = 0; game_delta = 0;})
-	shortcut.add( "9", function() { walk_in_place(); })
+	shortcut.add( "9", function() { game_state = 1; })
 	shortcut.add( "m", function() { 
 		if (player.mines > 0) {
 			player.mines--;
@@ -315,7 +316,7 @@ Animation.prototype.init_keys = function()
 		}
 	});
 
-	shortcut.add( "ALT+Space", function() { top_view = !top_view; } );
+	shortcut.add( ".", function() { top_view = !top_view; } );
 	
 	shortcut.add( "p",     ( function(self) { return function() { self.m_axis.basis_selection++; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );
 	// shortcut.add( "m",     ( function(self) { return function() { self.m_axis.basis_selection--; console.log("Selected Basis: " + self.m_axis.basis_selection ); }; } ) (this) );	
@@ -457,7 +458,7 @@ Animation.prototype.display = function(time)
 			player.pos_y -= 0.06 * 0.03 * this.animation_delta_time;
 			player.pos_z -= 0.06 * 0.03 * this.animation_delta_time;
 		}
-		if (game_delta > 5000 && game_delta < 5100) {
+		if (game_delta > 5000 && game_delta < 5200) {
 			player2.pos_x = 0;
 			player2.pos_y = 0;
 			player2.pos_z = 0;
@@ -467,7 +468,26 @@ Animation.prototype.display = function(time)
 			abducted_player.pos_x = -7;
 			abducted_player.pos_y = 2;
 			abducted_player.pos_z = 1;
+			abducted_player.body_color = red;
+			abducted_player.upper_arm_color = red;
+			abducted_player.lower_arm_color = skin;
+			abducted_player.butt_color = dark_blue;
+			abducted_player.lower_leg_color = skin;
+			abducted_player.upper_leg_color = skin;
+			abducted_player.hat_color = dark_blue;
+			abducted_player.bazooka = false;
 			abducted_player.direction = -90;
+
+			abducted_player.upper_left_arm_angle_z = 30;
+			abducted_player.lower_left_arm_angle_z = -10;
+			abducted_player.upper_right_arm_angle_x = 0;
+			abducted_player.lower_left_arm_angle_x = -10;
+
+			abducted_player.upper_right_arm_angle_z = 30;
+			abducted_player.lower_right_arm_angle_z = 10;
+			abducted_player.upper_right_arm_angle_x = 0;
+			abducted_player.lower_right_arm_angle_x = -10;
+
 			mt = translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z);
 
 		}
@@ -481,7 +501,7 @@ Animation.prototype.display = function(time)
 			this.draw_sky(model_transform);
 			model_transform = mult(model_transform, translate(player.pos_x, 2, player.pos_z));
 			model_transform = mult(model_transform, rotate(direction, 0, 1, 0));
-			this.draw_character(model_transform);
+			this.draw_character(model_transform, player);
 			model_transform = stack.pop();
 			stack.push(model_transform);
 		}
@@ -504,17 +524,17 @@ Animation.prototype.display = function(time)
 			opening_dist = Math.max(cam_x_dist, opening_dist);
 		}
 
+		// draw someone getting abducted
+		// play a scream
 		if (game_delta > 7000 && game_delta < 9500) {
-			// draw someone getting abducted
-			// play a scream
 			music["torture"].play();
-			raise_arm(this.animation_delta_time);
 			model_transform = mult(model_transform, translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z));
 			model_transform = mult(model_transform, rotate(abducted_player.direction, 0, 1, 0));
-			this.draw_victim(model_transform, abducted_player);
-			this.draw_ray(mt);
+			this.draw_character(model_transform, abducted_player);
+			var m = mult(model_transform, scale(.5, 1, .5));
+			this.draw_ray(m);
 
-			abducted_player.pos_y += 0.02;
+			abducted_player.pos_y += 0.02 * this.animation_delta_time * 0.06;
 			model_transform = stack.pop();
 			stack.push(model_transform);
 
@@ -593,11 +613,11 @@ Animation.prototype.display = function(time)
 		}
 
 		// rotate behind
-		if (game_delta > 16000 && game_delta < 18000) {
+		if (game_delta > 16000 && game_delta < 17000) {
 			var cam_x_dist = Math.cos(to_radians(player2.direction));
 			var cam_z_dist = Math.sin(to_radians(player2.direction));
-			if (player2.direction > -270)
-				player2.direction -= 5;
+			if (player2.direction > -280)
+				player2.direction -= 5 * this.animation_delta_time * 0.06;
 
 			var eye_x, eye_y, eye_z;
 			eye_x = player.pos_x - cam_x_dist;
@@ -612,7 +632,8 @@ Animation.prototype.display = function(time)
 		}
 
 		// shoot
-		if (game_delta > 18000 && game_delta < 18100) {
+		if (game_delta > 17000 && game_delta < 17100) {
+			player2.direction = -270;
 			var cam_x_dist = Math.cos(to_radians(player2.direction));
 			var cam_z_dist = Math.sin(to_radians(player2.direction));
 
@@ -637,7 +658,8 @@ Animation.prototype.display = function(time)
 			this.graphicsState.camera_transform = lookAt(eye, at, up);
 		}
 
-		if (game_delta > 18100 && game_delta < 19500) {
+		// bullet moving
+		if (game_delta > 17100 && game_delta < 18500) {
 			model_transform = stack.pop();
 			stack.push(model_transform);
 			model_transform = mult(model_transform, translate(opening_bullet.pos_x, opening_bullet.pos_y, opening_bullet.pos_z))
@@ -664,11 +686,11 @@ Animation.prototype.display = function(time)
 			var eye = vec3(eye_x, eye_y, eye_z);
 			var up = vec3(Math.cos(to_radians(player2.direction)), 1, Math.sin(to_radians(player2.direction)));
 
-			opening_bullet.pos_z += 0.005 * velocity;
+			opening_bullet.pos_z += 0.005 * velocity * this.animation_delta_time * 0.06;
 			velocity += 0.1;
 			this.graphicsState.camera_transform = lookAt(eye, at, up);
 		}
-		if (game_delta > 19500) {
+		if (game_delta > 18500) {
 			music["boom"].play();
 			game_state = 1;
 
@@ -699,7 +721,7 @@ Animation.prototype.display = function(time)
 			if (opening_delta < 7500) {
 				model_transform = mult(model_transform, translate (player.pos_x, player.pos_y, player.pos_z));
 				model_transform = mult(model_transform, rotate( 90, 0, 1, 0));
-				this.draw_character(model_transform);
+				this.draw_character(model_transform, player);
 			}
 
 			model_transform = a_mt;
@@ -743,7 +765,7 @@ Animation.prototype.display = function(time)
 		this.graphicsState.camera_transform = lookAt(eye, at, up);
 	}
 
-	if (game_state > 1) {
+	if (game_state > 1 && game_state !== 6) {
 		this.draw_sky(model_transform);
 
 		if (game_state === 2 && Math.round(game_delta) % 100 == 0) {
@@ -769,8 +791,8 @@ Animation.prototype.display = function(time)
 			model_transform = mult(model_transform, rotate(death_angle, 1, 1, 1));
 		}
 
-		if (game_state === 2 || game_state === 3)
-			this.draw_character(model_transform, greyPlastic);
+		if (game_state === 2 || game_state === 3 || game_state === 5)
+			this.draw_character(model_transform, player);
 
 		// draw mines
 		model_transform = stack.pop();
@@ -794,6 +816,7 @@ Animation.prototype.display = function(time)
 			walk_in_place(this.animation_delta_time);
 		}
 
+		if (game_state === 2) {
 		// draw enemies
 		model_transform = stack.pop();
 		stack.push(model_transform);
@@ -875,7 +898,9 @@ Animation.prototype.display = function(time)
 				stack.push(model_transform);
 			}
 		}
+	}
 
+if (game_state === 2) {
 		// check collision with mines
 		if (player.mines < 3) {
 			for (var i = 0; i < board.enemy_arr.length; i++) {
@@ -889,12 +914,17 @@ Animation.prototype.display = function(time)
 						player.score += 10;
 						music["boom"].currentTime = 0;
 						music["boom"].play(); 
-						// explode!
+
+						if (player.score >= 10) {
+							game_state = 5;
+							console.log("WIN!");
+						}
 						break;
 					}
 				}
 			}
 		}
+
 
 		// draw bullet
 		model_transform = stack.pop();
@@ -911,7 +941,10 @@ Animation.prototype.display = function(time)
 					player.score += 10;
 					music["boom"].currentTime = 0;
 					music["boom"].play(); 
-					// explode!
+					if (player.score >= 10) {
+							game_state = 5;
+							console.log("WIN!");
+						}
 					break;
 				}
 			}
@@ -931,7 +964,7 @@ Animation.prototype.display = function(time)
 			bullet.pos_y = player.pos_y;
 			bullet.pos_z = player.pos_z;
 		}
-
+}
 	} // END GAME PLAY 2
 
 	if (game_state === 3) {
@@ -972,11 +1005,122 @@ Animation.prototype.display = function(time)
 		}
 	}
 
+	if (game_state === 5) {
+
+			death_cam_dist += 0.1;
+			if (death_cam_dist > 15)
+				death_cam_dist = 15;
+			var cam_x_dist = death_cam_dist * Math.cos(to_radians(direction));
+			var cam_z_dist = death_cam_dist * Math.sin(to_radians(direction));
+
+			var eye_x, eye_y, eye_z;
+			eye_x = player.pos_x - cam_x_dist;
+			eye_y = player.pos_y + death_cam_dist/10;
+			eye_z = player.pos_z - cam_z_dist;
+
+			var at = vec3(player.pos_x, player.pos_y + death_cam_dist/4, player.pos_z);
+			var eye = vec3(eye_x, eye_y, eye_z);
+			var up = vec3(Math.cos(to_radians(direction)), 1, Math.sin(to_radians(direction)));
+
+			if (top_view) {
+				at = vec3(0, 0, 0);
+				eye = vec3(0, 70, 0);
+			}
+
+			this.graphicsState.camera_transform = lookAt(eye, at, up);
 
 
-		
+		music["training"].pause();
+		for (var i = 0 ; i < board.enemy_arr.length; i++) {
+			board.enemy_arr[i].spawned = false;
+		}
+		// zoom out
+		// have space ship come in
+		// lower friend back
+		// be happy!
+		if (death_delta < 1000) {
+			abducted_player.pos_x = player.pos_x;
+			abducted_player.pos_x = player.pos_y;
+			abducted_player.pos_x = player.pos_z;
+			abducted_player.direction = 90
+		}
 
-	}	
+
+		death_delta += this.animation_delta_time;
+		if (death_delta > 2000 && death_delta < 5500) {
+		// model_transform = mult(model_transform, rotate(abducted_player.direction, 0, 1, 0));
+			var c_tm = mult(model_transform, translate(abducted_player.pos_x, abducted_player.pos_y + 14, abducted_player.pos_z));
+			c_tm = mult(c_tm, rotate(abducted_player.direction, 0, 1, 0));
+			this.draw_character(c_tm, abducted_player)
+
+			// if (abducted_player.pos_y + 14 > 0)
+				abducted_player.pos_y -=0.1 * this.animation_delta_time * 0.03;
+
+			var space = mult(model_transform, translate(abducted_player.pos_x, 14, abducted_player.pos_z));
+			this.draw_space_ship(space);
+
+			var ray_tm = mult(model_transform, translate(abducted_player.pos_x, 7, abducted_player.pos_z));
+			this.draw_ray(ray_tm);
+			
+		}
+
+		if (death_delta > 5500) {
+			game_state = 6;
+			abducted_player.pos_x = -1;
+			abducted_player.pos_y = -2;
+			abducted_player.pos_z = 0;
+			player.pos_x = 1;
+			player.pos_y = -2;
+			player.pos_z = 0;
+		}
+	}
+	if (game_state === 6) {
+		var at = vec3(0, 0, 0);
+		var eye = vec3(0, 0, 8);
+		var up = vec3(0, 1, 0);
+
+		this.graphicsState.camera_transform = lookAt(eye, at, up);
+
+		abducted_player.body_color = red;
+		abducted_player.upper_arm_color = red;
+		abducted_player.lower_arm_color = skin;
+		abducted_player.butt_color = dark_blue;
+		abducted_player.lower_leg_color = skin;
+		abducted_player.upper_leg_color = skin;
+		abducted_player.hat_color = dark_blue;
+		abducted_player.bazooka = false;
+
+		abducted_player.upper_left_arm_angle_z = 30;
+		abducted_player.lower_left_arm_angle_z = -10;
+		abducted_player.upper_right_arm_angle_x = 0;
+		abducted_player.lower_left_arm_angle_x = -10;
+
+		abducted_player.upper_right_arm_angle_z = 30;
+		abducted_player.lower_right_arm_angle_z = 10;
+		abducted_player.upper_right_arm_angle_x = 0;
+		abducted_player.lower_right_arm_angle_x = -10;
+
+		abducted_player.pos_x = -0.5;
+		abducted_player.pos_y = -1;
+		abducted_player.pos_z = 0;
+
+		player.upper_left_leg_angle_x = 80;
+		player.upper_right_leg_angle_x = -10;
+		player.lower_right_leg_angle_x = -90;
+		player.lower_left_leg_angle_x = -90;
+
+		player.pos_x = 0.5;
+		player.pos_y = -1.3;
+		player.pos_z = 0;
+
+		var mt = translate(abducted_player.pos_x, abducted_player.pos_y, abducted_player.pos_z);
+		var mt2 = mult(translate(player.pos_x, player.pos_y, player.pos_z), rotate(90, 0, 1,0));
+
+		this.draw_character(mt, abducted_player);
+		this.draw_character(mt2, player);
+
+	}
+}	
 
 Animation.prototype.update_strings = function( debug_screen_object )		// Strings this particular class contributes to the UI
 {
@@ -1006,6 +1150,15 @@ Animation.prototype.update_strings = function( debug_screen_object )		// Strings
 		debug_screen_object.controls1 = "Press m to place a mine."
 		debug_screen_object.controls2 = "Press Arrow Keys to move."
 		debug_screen_object.controls3 = "Press Enter to reset game."
+	}
+	else if (game_state === 6) {
+		debug_screen_object.end_game = "YOU WIN!!";
+		debug_screen_object.try_again = "Press Enter to play again!"
+		debug_screen_object.controls0 = ""
+		debug_screen_object.controls1 = ""
+		debug_screen_object.controls2 = ""
+		debug_screen_object.controls3 = ""
+
 	}
 	else {
 		debug_screen_object.end_game = "";
@@ -1038,13 +1191,13 @@ Animation.prototype.draw_landmine = function(model_transform) {
 	this.m_landmine.draw(this.graphicsState, model_transform, camo);
 }
 
-Animation.prototype.draw_character = function (model_transform, color) {
+Animation.prototype.draw_character = function (model_transform, player) {
 
 		var stack = new Array();
 		model_transform = mult(model_transform, scale(0.25, 0.25, 0.25));
 		stack.push(model_transform);
 		// head and cap
-		this.draw_cap(model_transform, camo);
+		this.draw_cap(model_transform, player.hat_color);
 		this.m_sphere.draw(this.graphicsState, model_transform, player.skin_color);
 
 		// eyes
@@ -1071,28 +1224,28 @@ Animation.prototype.draw_character = function (model_transform, color) {
 
 		// legs
 		model_transform = mult(model_transform, scale(0.9, 1, 1));
-		this.draw_leg_right(model_transform);
+		this.draw_leg_right(model_transform, player);
 		model_transform = mult(model_transform, scale(1/0.9, 1, 1));
 		model_transform = mult(model_transform, translate(1, 0, 0));
 		model_transform = mult(model_transform, scale(0.9, 1, 1));
-		this.draw_leg_left(model_transform);
+		this.draw_leg_left(model_transform, player);
 		model_transform = mult(model_transform, scale(1/0.9, 1, 1));
 
 		model_transform = stack.pop();
 		// arms?
 		model_transform = mult(model_transform, translate(-0.4, -1, 0));
-		this.draw_bazooka(model_transform, camo);
-
+		if (player.bazooka) 
+			this.draw_bazooka(model_transform, camo);
 
 		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_x, 1, 0, 0));
 		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_z, 0, 0, 1));
-		this.draw_arm_right(model_transform);
+		this.draw_arm_right(model_transform, player);
 
 		model_transform = mult(model_transform, rotate(player.upper_right_arm_angle_z, 0, 0, 1));
 		model_transform = mult(model_transform, translate(0.8, 0, 0));
 		model_transform = mult(model_transform, rotate(-player.upper_right_arm_angle_x - player.upper_left_arm_angle_x, 1, 0, 0));
 		model_transform = mult(model_transform, rotate(player.upper_left_arm_angle_z, 0, 0, 1));
-		this.draw_arm_left(model_transform);
+		this.draw_arm_left(model_transform, player);
 
 }
 
@@ -1131,13 +1284,13 @@ Animation.prototype.draw_lower_leg = function(model_transform, color) {
 	return model_transform;
 }
 
-Animation.prototype.draw_leg_left = function(model_transform) {
+Animation.prototype.draw_leg_left = function(model_transform, player) {
 	model_transform = mult(model_transform, rotate(-player.upper_left_leg_angle_x, 1, 0, 0));
 	model_transform = mult(model_transform, rotate(player.upper_left_leg_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -1, 0));
 	this.draw_upper_leg(model_transform, player.lower_leg_color);
 	model_transform = mult(model_transform, translate(0, -1, 0));
-	this.draw_knee_cap(model_transform, player.knee_color);
+	this.draw_knee_cap(model_transform, player.upper_leg_color);
 	model_transform = mult(model_transform, rotate(-player.lower_left_leg_angle_x, 1, 0, 0));
 	model_transform = mult(model_transform, rotate(-player.lower_left_leg_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -0.75, 0));
@@ -1148,13 +1301,13 @@ Animation.prototype.draw_leg_left = function(model_transform) {
 	return model_transform;
 }
 
-Animation.prototype.draw_leg_right = function(model_transform) {
+Animation.prototype.draw_leg_right = function(model_transform, player) {
 	model_transform = mult(model_transform, rotate(-player.upper_right_leg_angle_x, 1, 0, 0));
 	model_transform = mult(model_transform, rotate(player.upper_right_leg_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -1, 0));
 	this.draw_upper_leg(model_transform, player.upper_leg_color);
 	model_transform = mult(model_transform, translate(0, -1, 0));
-	this.draw_knee_cap(model_transform, player.knee_color);
+	this.draw_knee_cap(model_transform, player.upper_leg_color);
 	model_transform = mult(model_transform, rotate(-player.lower_right_leg_angle_x, 1, 0, 0));
 	model_transform = mult(model_transform, rotate(player.lower_right_leg_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -0.75, 0));
@@ -1193,13 +1346,13 @@ Animation.prototype.draw_hand = function(model_transform, color) {
 	return model_transform;
 }
 
-Animation.prototype.draw_arm_left = function(model_transform) {
-	this.draw_shoulder(model_transform, player.shoulder_color);
+Animation.prototype.draw_arm_left = function(model_transform, player) {
+	this.draw_shoulder(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
 	this.draw_upper_arm(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
-	this.draw_shoulder(model_transform, player.shoulder_color);
+	this.draw_shoulder(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, rotate(player.lower_left_arm_angle_x, 1, 0, 0));
 	model_transform = mult(model_transform, rotate(player.lower_left_arm_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
@@ -1218,13 +1371,13 @@ Animation.prototype.draw_cap = function(model_transform, color) {
 	this.m_sphere.draw(this.graphicsState, model_transform, color);
 }
 
-Animation.prototype.draw_arm_right = function(model_transform) {
-	this.draw_shoulder(model_transform, player.shoulder_color);
+Animation.prototype.draw_arm_right = function(model_transform, player) {
+	this.draw_shoulder(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, scale(0.5, 0.5, 0.5));
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
 	this.draw_upper_arm(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
-	this.draw_shoulder(model_transform, player.shoulder_color);
+	this.draw_shoulder(model_transform, player.upper_arm_color);
 	model_transform = mult(model_transform, rotate(player.lower_right_arm_angle_x, 1, 0, 0));
 	model_transform = mult(model_transform, rotate(player.lower_right_arm_angle_z, 0, 0, 1));
 	model_transform = mult(model_transform, translate(0, -1.25, 0));
@@ -1235,8 +1388,8 @@ Animation.prototype.draw_arm_right = function(model_transform) {
 	return model_transform;
 }
 
-Animation.prototype.draw_body = function(model_transform) {
-	this.draw_angled_cylinder(model_transform, player.body_color);
+Animation.prototype.draw_body = function(model_transform, color) {
+	this.draw_angled_cylinder(model_transform, color);
 
 	return model_transform;
 }
@@ -1512,6 +1665,8 @@ function Player(x, y, z) {
 	this.foot_color =  skin;
 	this.hand_color = skin;
 	this.skin_color = skin;
+	this.bazooka = true;
+	this.hat_color = camo;
 
 	this.dead = false;
 
@@ -1746,6 +1901,7 @@ function pivot() {
 }
 
 function raise_arm(delta) {
+	abducted_player.upper_arm_angle_x += delta/3; 
 	if (abducted_player.upper_arm_angle_x !== arm_stop_angle) {
 		if (arms_up) {
 			abducted_player.upper_arm_angle_x += delta/3;
@@ -2022,59 +2178,4 @@ function Flower() {
 	this.STEM_SEG_X = 0.5;
 	this.STEM_SEG_Y = 1;
 	this.STEM_SEG_Z = 0.5;
-}
-
-Animation.prototype.draw_victim = function (model_transform, player) {
-
-		var stack = new Array();
-		model_transform = mult(model_transform, scale(0.25, 0.25, 0.25));
-		stack.push(model_transform);
-		// head and cap
-		this.draw_cap(model_transform, red);
-		this.m_sphere.draw(this.graphicsState, model_transform, player.skin_color);
-
-		// eyes
-		// model_transform = mult(model_transform, translate(-0.4, 0, 1));
-		model_transform = mult(model_transform, rotate(12, 1, 0, 0));
-		model_transform = mult(model_transform, translate(-0.35, 0, 0.9));
-		this.draw_eye(model_transform, new Material( vec4( 0, 0, 0,1 ), 1, 1, 1, 40 ));
-		model_transform = mult(model_transform, translate(0.7, 0, 0));
-		this.draw_eye(model_transform, new Material( vec4( 0, 0, 0,1 ), 1, 1, 1, 40 ));
-		model_transform = mult(model_transform, translate(-0.35, 0, -0.9));
-		model_transform = mult(model_transform, rotate(-12, 1, 0, 0));
-
-		model_transform = mult(model_transform, translate(0, -1.75, 0));
-
-		// body
-		model_transform = mult(model_transform, scale(1, 1, 0.7));
-		this.draw_body(model_transform, red);
-		model_transform = mult(model_transform, scale(1, 1, 1/0.7));
-		model_transform = mult(model_transform, translate(0, -1, 0));
-		model_transform = mult(model_transform, scale(1, 0.7, 0.7));
-		this.draw_bottom_half_sphere(model_transform, player.butt_color);
-		model_transform = mult(model_transform, scale(1, 1/0.7, 1/0.7));
-		model_transform = mult(model_transform, translate(-0.5, -0.2, 0));
-
-		// legs
-		model_transform = mult(model_transform, scale(0.9, 1, 1));
-		this.draw_leg_right(model_transform);
-		model_transform = mult(model_transform, scale(1/0.9, 1, 1));
-		model_transform = mult(model_transform, translate(1, 0, 0));
-		model_transform = mult(model_transform, scale(0.9, 1, 1));
-		this.draw_leg_left(model_transform);
-		model_transform = mult(model_transform, scale(1/0.9, 1, 1));
-
-		model_transform = stack.pop();
-		// arms?
-		model_transform = mult(model_transform, translate(0, -1, 0));
-		model_transform = mult(model_transform, rotate(abducted_player.upper_right_arm_angle_x, 1, 0, 0));
-		model_transform = mult(model_transform, rotate(-abducted_player.upper_right_arm_angle_z, 0, 0, 1));
-		this.draw_arm_right(model_transform);
-
-		model_transform = mult(model_transform, rotate(abducted_player.upper_right_arm_angle_z, 0, 0, 1));
-		model_transform = mult(model_transform, translate(0.8, 0, 0));
-		model_transform = mult(model_transform, rotate(-abducted_player.upper_right_arm_angle_x - abducted_player.upper_left_arm_angle_x, 1, 0, 0));
-		model_transform = mult(model_transform, rotate(abducted_player.upper_left_arm_angle_z, 0, 0, 1));
-		this.draw_arm_left(model_transform);
-
 }
