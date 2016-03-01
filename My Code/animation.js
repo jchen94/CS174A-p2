@@ -30,6 +30,7 @@ var canvas, canvas_size, gl = null, g_addrs,
 
 var moved = 0;
 var speed = 1.5;
+var POINTS_TO_WIN = 50;
 
 // 0 for starting sequence
 // game state 1 for title screen
@@ -69,7 +70,6 @@ var player2 = new Player(0, board.BOARD_UNIT_SIZE/2, 0);
 var abducted_player = new Player(0, 0, 0);
 
 var bullet = new Bullet(0, board.BOARD_UNIT_SIZE/2 + 0.75, 0); // oh boy! This is just a test. Figure out something better later.
-var flower = new Flower();
 var board_x_bound, board_z_bound = board.BOARD_SIZE * board.BOARD_UNIT_SIZE;
 var death_delta = 0;
 var death_cam_dist = 2.5;
@@ -915,7 +915,7 @@ if (game_state === 2) {
 						music["boom"].currentTime = 0;
 						music["boom"].play(); 
 
-						if (player.score >= 10) {
+						if (player.score >= POINTS_TO_WIN) {
 							game_state = 5;
 							console.log("WIN!");
 						}
@@ -941,7 +941,7 @@ if (game_state === 2) {
 					player.score += 10;
 					music["boom"].currentTime = 0;
 					music["boom"].play(); 
-					if (player.score >= 10) {
+					if (player.score >= POINTS_TO_WIN) {
 							game_state = 5;
 							console.log("WIN!");
 						}
@@ -1076,7 +1076,7 @@ if (game_state === 2) {
 	}
 	if (game_state === 6) {
 		var at = vec3(0, 0, 0);
-		var eye = vec3(0, 0, 8);
+		var eye = vec3(0, -0.5, 8);
 		var up = vec3(0, 1, 0);
 
 		this.graphicsState.camera_transform = lookAt(eye, at, up);
@@ -2125,57 +2125,4 @@ function jump() {
 
 function crouch() {
 
-}
-
-
-Animation.prototype.draw_petals = function(model_transform) {
-	model_transform = mult(model_transform, rotate(20, 1, 0, 0));
-	var reset = model_transform;
-	var numPetals = flower.NUM_FLOWER_PETALS;
-	var angle = 0;
-
-	for (var i = 0; i < numPetals; i++) {
-		model_transform = mult(model_transform, rotate(angle, 0, 1, 0));
-		model_transform = mult(model_transform, rotate(-7, 1, 0, 0));
-
-		model_transform = mult(model_transform, translate(0, 0, flower.FLOWER_RADIUS + 3 * flower.FLOWER_RADIUS));
-		model_transform = mult(model_transform, scale(flower.PETAL_X, flower.PETAL_Y, flower.PETAL_Z));
-		this.m_sphere.draw(this.graphicsState, model_transform, flower.PETAL_MATERIAL);
-		model_transform = reset;
-		angle += 360/numPetals;
-	}
-
-	var angle_interleave = 360/numPetals/2;
-	for (var i =0; i < numPetals; i++) {
-		model_transform = mult(model_transform, rotate(angle + angle_interleave, 0, 1, 0));
-		model_transform = mult(model_transform, rotate(-5, 1, 0, 0));
-
-		model_transform = mult(model_transform, translate(0, 0, flower.FLOWER_RADIUS + 3 * flower.FLOWER_RADIUS));
-		model_transform = mult(model_transform, scale(flower.PETAL_X, flower.PETAL_Y, flower.PETAL_Z));
-		this.m_sphere.draw(this.graphicsState, model_transform, flower.PETAL_MATERIAL);
-		model_transform = reset;
-		angle += 360/numPetals;
-	}
-}
-
-function Flower() {
-
-	// controls the swaying angle of flower
-	this.MAX_STEM_ANGLE = 1;
-
-	// dimensions for flower
-	this.FLOWER_MATERIAL = new Material (vec4 (.5, .5, 0, 1), 1, 1, 1, 40); // default yellow
-	this.FLOWER_RADIUS = 1;
-	this.PETAL_MATERIAL = new Material (vec4 (.4, 0, 0, 1), 1, 1, 1, 40);
-	this.NUM_FLOWER_PETALS = 24;
-	this.PETAL_X = 0.5;
-	this.PETAL_Y = 0.2;
-	this.PETAL_Z = 4;
-
-	// dimensions for one stem segment
-	this.STEM_MATERIAL = new Material (vec4 (0.333333, 0.419608, 0.184314, 1), 1, 1, 1, 40); // default olive greenPlastic
-	this.NUMBER_OF_STEM_SEGS = 24;
-	this.STEM_SEG_X = 0.5;
-	this.STEM_SEG_Y = 1;
-	this.STEM_SEG_Z = 0.5;
 }
